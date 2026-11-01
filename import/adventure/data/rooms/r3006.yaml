@@ -1,0 +1,14 @@
+id: R3006
+name: Troll Bridge
+area: Frostspine Caverns
+description: A stone bridge, thick with frost, crosses a steam vent. Frostspine trolls use it as a toll
+  road, and they are not feeling generous.
+exits:
+- name: west
+  target: R3005
+  type: normal
+  description: Return to the Glacier Crevasse.
+- name: south
+  target: R3007
+  type: normal
+  description: Continue to the Hot Springs.

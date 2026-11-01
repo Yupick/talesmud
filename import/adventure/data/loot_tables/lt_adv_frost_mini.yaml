@@ -1,0 +1,16 @@
+id: LT_ADV_FROST_MINI
+name: Frostspine Mini-Boss Loot
+description: The treasures of the Frostspine's pack leaders.
+entries:
+- itemTemplateId: ITM_ADV_FUR_LINED_BOOTS
+  dropChance: 0.2
+  minQuantity: 1
+  maxQuantity: 1
+- itemTemplateId: ITM_ADV_GLACIAL_PENDANT
+  dropChance: 0.15
+  minQuantity: 1
+  maxQuantity: 1
+- itemTemplateId: ITM_ADV_FROST_CRYSTAL
+  dropChance: 0.3
+  minQuantity: 1
+  maxQuantity: 1

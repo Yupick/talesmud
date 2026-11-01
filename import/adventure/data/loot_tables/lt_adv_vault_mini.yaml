@@ -1,0 +1,20 @@
+id: LT_ADV_VAULT_MINI
+name: Vault Mini-Boss Loot
+description: The guarded treasures of the vault's knights and priests.
+entries:
+- itemTemplateId: ITM_ADV_EMBER_RING
+  dropChance: 0.2
+  minQuantity: 1
+  maxQuantity: 1
+- itemTemplateId: ITM_ADV_BRONZE_DAGGER
+  dropChance: 0.2
+  minQuantity: 1
+  maxQuantity: 1
+- itemTemplateId: ITM_ADV_GUARDIAN_PLATE
+  dropChance: 0.15
+  minQuantity: 1
+  maxQuantity: 1
+- itemTemplateId: ITM_ADV_ANCIENT_BONE
+  dropChance: 0.3
+  minQuantity: 1
+  maxQuantity: 1

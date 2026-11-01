@@ -1,0 +1,18 @@
+id: LT_ADV_MATRIARCH
+name: Frostspine Matriarch Loot
+description: The hoard of the Frozen Throne.
+entries:
+- itemTemplateId: ITM_ADV_ICEFORGE_BLADE
+  dropChance: 0.12
+  minQuantity: 1
+  maxQuantity: 1
+  rarity: unique
+  boss_only: true
+- itemTemplateId: ITM_ADV_FROST_AMULET
+  dropChance: 0.2
+  minQuantity: 1
+  maxQuantity: 1
+- itemTemplateId: ITM_ADV_GLACIAL_PENDANT
+  dropChance: 0.1
+  minQuantity: 1
+  maxQuantity: 1

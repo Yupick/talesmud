@@ -1,0 +1,20 @@
+id: R2003
+name: Hall of Echoes
+area: The Buried Vault
+description: A long gallery where every footstep returns a dozen whispers. One flagstone near the far
+  wall sits slightly proud of the rest, its edges worn smooth by a trap mechanism long past its maintenance.
+exits:
+- name: west
+  target: R2002
+  type: normal
+  description: Wade back to the Flooded Entry.
+- name: east
+  target: R2004
+  type: normal
+  description: Pick your way into the Rubble Passage.
+actions:
+- name: inspect loose flagstone
+  type: response
+  description: Pry at the raised flagstone.
+  response: The flagstone tilts — a jet of needle-thin darts hisses from the wall and grazes your arm.
+    You take 5 damage. The mechanism is now visibly spent, but the lesson stings.

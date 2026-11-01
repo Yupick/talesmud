@@ -1,0 +1,12 @@
+id: LT_ADV_MAW_TRASH
+name: Maw Tendril Loot
+description: Slime and scales torn from the abyss.
+entries:
+- itemTemplateId: ITM_ADV_MAW_SLIME
+  dropChance: 0.4
+  minQuantity: 1
+  maxQuantity: 1
+- itemTemplateId: ITM_ADV_LEVIATHAN_SCALE
+  dropChance: 0.3
+  minQuantity: 1
+  maxQuantity: 1

@@ -1,0 +1,12 @@
+id: ITM_ADV_BRONZE_DAGGER
+name: Bronze Vault Dagger
+description: A short bronze blade, pitted by centuries in the dark. Still sharp.
+type: weapon
+level: 6
+quality: normal
+basePrice: 40
+slot: main_hand
+subType: sword
+attributes:
+  damage_min: 8
+  damage_max: 12

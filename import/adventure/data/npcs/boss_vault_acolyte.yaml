@@ -1,0 +1,22 @@
+id: BOSS_VAULT_ACOLYTE
+name: Vault Acolyte
+description: The Warden's choir-master, its fingers still stained with the mortar of ten thousand bone-hymns.
+level: 9
+maxHitPoints: 100
+spawnRoomId: R2009
+enemyTrait:
+  difficulty: hard
+  attackPower: 10
+  defense: 4
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 300
+  goldDrop:
+    min: 12
+    max: 30
+  lootTableId: LT_ADV_VAULT_MINI
+  creatureType: humanoid
+  combatStyle: caster
+  resetOnDisengage: true

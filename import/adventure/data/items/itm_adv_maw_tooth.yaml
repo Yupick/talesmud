@@ -1,0 +1,14 @@
+id: ITM_ADV_MAW_TOOTH
+name: Tooth of the Elder Maw
+description: A barn-door tooth, ripped from the abyss leviathan's jaw. +50-70 damage. Only one may be
+  held.
+type: weapon
+level: 25
+quality: mythic
+basePrice: 1200
+slot: main_hand
+subType: axe
+unique: true
+attributes:
+  damage_min: 50
+  damage_max: 70

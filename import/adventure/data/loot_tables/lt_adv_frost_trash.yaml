@@ -1,0 +1,12 @@
+id: LT_ADV_FROST_TRASH
+name: Frostspine Trash Loot
+description: Pelts, shards, and scraps from the Frostspine's hunters and hunted.
+entries:
+- itemTemplateId: ITM_ADV_WOLF_PELT
+  dropChance: 0.35
+  minQuantity: 1
+  maxQuantity: 1
+- itemTemplateId: ITM_ADV_FROST_CRYSTAL
+  dropChance: 0.25
+  minQuantity: 1
+  maxQuantity: 1

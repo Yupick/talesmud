@@ -1,0 +1,6 @@
+id: SCR_ADV_MATRIARCH_ADDS
+name: 'Frostspine Matriarch: Call the Whelps'
+description: The Matriarch calls her last whelps from the blue fire.
+type: npc_hook
+language: lua
+code: tales.combat.summon("ENM_FROST_WHELP", 1)

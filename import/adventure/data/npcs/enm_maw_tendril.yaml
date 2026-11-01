@@ -1,0 +1,21 @@
+id: ENM_MAW_TENDRIL
+name: Maw Tendril
+description: A torn-off tendril of the Elder Maw, still grasping. It fights with the leviathan's borrowed
+  hunger.
+level: 21
+maxHitPoints: 90
+enemyTrait:
+  difficulty: normal
+  attackPower: 14
+  defense: 6
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 400
+  goldDrop:
+    min: 30
+    max: 60
+  lootTableId: LT_ADV_MAW_TRASH
+  creatureType: aberration
+  combatStyle: brute

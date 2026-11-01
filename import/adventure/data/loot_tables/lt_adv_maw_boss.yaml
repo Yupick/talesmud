@@ -1,0 +1,25 @@
+id: LT_ADV_MAW_BOSS
+name: Elder Maw Raid Loot
+description: The leviathan's hoard — raid-grade treasure for a full party.
+entries:
+- itemTemplateId: ITM_ADV_MAW_TOOTH
+  dropChance: 1.0
+  minQuantity: 1
+  maxQuantity: 1
+  guaranteed: true
+  rarity: unique
+  boss_only: true
+- itemTemplateId: ITM_ADV_ABYSSAL_CROWN
+  dropChance: 0.25
+  minQuantity: 1
+  maxQuantity: 1
+  rarity: unique
+  boss_only: true
+- itemTemplateId: ITM_ADV_LEVIATHAN_SCALE
+  dropChance: 0.5
+  minQuantity: 1
+  maxQuantity: 1
+- itemTemplateId: ITM_ADV_MAW_SLIME
+  dropChance: 0.5
+  minQuantity: 1
+  maxQuantity: 1

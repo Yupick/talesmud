@@ -1,0 +1,14 @@
+id: R1006
+name: Grounds Gate
+area: The Training Grounds
+description: A low stone gate marks the edge of the training grounds. Beyond it, the Old Mill Road leads
+  back to the village and out to the wider world.
+exits:
+- name: south
+  target: R1005
+  type: normal
+  description: Go back into the Focus Garden.
+- name: east
+  target: R0002
+  type: normal
+  description: Walk down the Old Mill Road.

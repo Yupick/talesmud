@@ -1,0 +1,8 @@
+id: SPW_FROST_TROLL_01
+name: Frostspine Trolls
+templateId: ENM_FROST_TROLL
+roomId: R3006
+maxInstances: 2
+spawnInterval: 2m
+initialCount: 1
+respawnDelay: 5m

@@ -1,0 +1,99 @@
+id: sorcerer
+name: Sorcerer
+description: "Ember-born. You burn twice as bright and half as long. A fire discharge, a summoned ember, and an overload when it matters."
+armor_type: Cloth
+combat_type: Magic
+school: fire
+primary: INT
+skill_class: sorcerer
+order: 6
+aliases: [hechicero, hechicera, tpl-sorcerer]
+races: [human, elf]
+portrait_class: mage
+hp_multiplier: 0.75
+caster: true
+hotbar_cap: 4
+bolt_charges: 1
+rig_charges: 1
+balance:
+  damage_dealt: 1.50
+  damage_taken: 1.30
+  behind_dealt: 1.15
+  swings: 1
+template:
+  id: tpl-sorcerer
+  backstory: "The fire answered before you knew the words, and it never asked for them."
+  origin_area: Ember Wastes
+  archetype: sorcerer
+  race: human
+  str: 4
+  dex: 6
+  int: 18
+  wis: 10
+  sta: 7
+  mana: 46
+  starting_items:
+    - {slot: main_hand, name: Apprentice Staff}
+    - {slot: chest, name: Cloth Robe}
+  default_skills: [sorcerer_bolt]
+skills:
+  - id: sorcerer_bolt
+    name: Ember Discharge
+    effect: bolt
+    level: 1
+    once_per_fight: true
+    keeps_swing: false
+    cooldown: 0
+    mana_cost: 10
+    component: fire_salt
+    multiplier: 0
+    target: enemy
+    tooltip: "Fire. Once a fight. Spend your swing. The next hit still lands, and the attacker takes it back as flame."
+  - id: sorcerer_sear
+    name: Fireblast
+    effect: sear
+    level: 4
+    once_per_fight: false
+    keeps_swing: false
+    cooldown: 4
+    mana_cost: 14
+    component: fire_salt
+    multiplier: 2.00
+    target: enemy
+    tooltip: "A fire cast at 2.00×. No burn. Replaces your swing this round. Glass cannon."
+  - id: sorcerer_rig
+    name: Ember Construct
+    effect: rig
+    level: 6
+    once_per_fight: true
+    keeps_swing: false
+    cooldown: 0
+    mana_cost: 10
+    component: fire_salt
+    multiplier: 0.50
+    target: enemy
+    tooltip: "Fire. Once a fight. Summon an ember construct. It hits twice at 0.50×, then falls apart."
+  - id: sorcerer_overload
+    name: Overload
+    effect: overload
+    level: 8
+    once_per_fight: true
+    keeps_swing: false
+    cooldown: 0
+    mana_cost: 6
+    component: fire_salt
+    multiplier: 0.80
+    target: enemy
+    tooltip: "Once a fight, while your ember construct is up. Its remaining hits deal 0.80×."
+  - id: sorcerer_mend
+    name: Ember Mend
+    effect: mend
+    level: 10
+    once_per_fight: false
+    keeps_swing: false
+    cooldown: 5
+    mana_cost: 12
+    component: fire_salt
+    multiplier: 0.20
+    target: self
+    tooltip: "Fire. Mend yourself for 20% of your max HP. Costs mana; the glass cannon's only mercy."

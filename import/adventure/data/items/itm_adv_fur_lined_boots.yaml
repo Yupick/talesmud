@@ -1,0 +1,10 @@
+id: ITM_ADV_FUR_LINED_BOOTS
+name: Fur-Lined Frost Boots
+description: Wolf-fur boots made by the hunters of the Frostspine. +4 defense.
+type: armor
+level: 12
+quality: rare
+basePrice: 110
+slot: boots
+attributes:
+  defense: 4

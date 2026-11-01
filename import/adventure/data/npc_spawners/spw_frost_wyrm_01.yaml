@@ -1,0 +1,8 @@
+id: SPW_FROST_WYRM_01
+name: Frostspine Wyrms
+templateId: ENM_FROST_WYRM
+roomId: R3009
+maxInstances: 2
+spawnInterval: 2m
+initialCount: 1
+respawnDelay: 5m

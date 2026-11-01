@@ -1,0 +1,21 @@
+id: R2007
+name: Crumbling Bridge
+area: The Buried Vault
+description: A stone bridge spans a lightless chasm. Its parapets are gone, and the flagstones groan underfoot.
+  Halfway across, the bridge dips — badly.
+exits:
+- name: north
+  target: R2006
+  type: normal
+  description: Climb back up to the Ashen Library.
+- name: south
+  target: R2008
+  type: normal
+  description: Cross to the Smuggler's Cellar.
+actions:
+- name: cross the bridge
+  type: response
+  description: Test the bridge with your weight.
+  response: A flagstone gives way under your boot. You catch yourself on the edge as the stone tumbles
+    into the dark. You take 8 damage from the scramble, and decide to cross properly next time — carefully,
+    one step at a time.

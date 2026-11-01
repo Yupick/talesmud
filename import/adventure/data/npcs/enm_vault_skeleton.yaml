@@ -1,0 +1,20 @@
+id: ENM_VAULT_SKELETON
+name: Vault Skeleton
+description: A burial college guard, risen from its rest. It remembers the forms, if not the reasons.
+level: 7
+maxHitPoints: 30
+enemyTrait:
+  difficulty: normal
+  attackPower: 5
+  defense: 2
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 75
+  goldDrop:
+    min: 5
+    max: 15
+  lootTableId: LT_ADV_VAULT_TRASH
+  creatureType: undead
+  combatStyle: soldier

@@ -1,0 +1,16 @@
+id: ENM_VAULT_WISP
+name: Vault Wisp
+description: A wisp of the vault's held breath, torn loose and set to guard. It burns cold where it touches.
+level: 8
+maxHitPoints: 25
+enemyTrait:
+  difficulty: easy
+  attackPower: 5
+  defense: 1
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 100
+  creatureType: undead
+  combatStyle: skirmisher

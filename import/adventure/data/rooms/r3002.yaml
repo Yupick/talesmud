@@ -1,0 +1,14 @@
+id: R3002
+name: Icy Descent
+area: Frostspine Caverns
+description: A steep, glass-slick stair spirals down into blue darkness. Handholds have been chopped into
+  the ice by generations of climbers.
+exits:
+- name: up
+  target: R3001
+  type: normal
+  description: Climb back to the Frozen Mouth.
+- name: south
+  target: R3003
+  type: normal
+  description: Continue down to the Wolf Den.

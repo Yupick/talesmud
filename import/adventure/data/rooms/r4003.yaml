@@ -1,0 +1,14 @@
+id: R4003
+name: The Gullet
+area: The Elder Maw
+description: The passage narrows into a throat of wet, pulsing stone. The walls breathe. There is no way
+  back but the way you came, and no way forward but down.
+exits:
+- name: west
+  target: R4002
+  type: normal
+  description: Back away to the Sunken Gallery.
+- name: down
+  target: R4004
+  type: normal
+  description: Descend into the Maw of the Deep.

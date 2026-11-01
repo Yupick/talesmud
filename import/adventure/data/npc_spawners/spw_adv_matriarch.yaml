@@ -1,0 +1,8 @@
+id: SPW_ADV_MATRIARCH
+name: The Frostspine Matriarch
+templateId: BOSS_FROST_MATRIARCH
+roomId: R3012
+maxInstances: 1
+spawnInterval: 5m
+initialCount: 1
+respawnDelay: 30m

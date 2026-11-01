@@ -1,0 +1,23 @@
+id: BOSS_VAULT_GOLEM
+name: Vault Golem
+description: A walking ossuary — a golem built from the bones of the college's own guardians, mortared
+  with old hymns.
+level: 10
+maxHitPoints: 120
+spawnRoomId: R2011
+enemyTrait:
+  difficulty: hard
+  attackPower: 11
+  defense: 6
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 350
+  goldDrop:
+    min: 15
+    max: 35
+  lootTableId: LT_ADV_VAULT_MINI
+  creatureType: construct
+  combatStyle: brute
+  resetOnDisengage: true

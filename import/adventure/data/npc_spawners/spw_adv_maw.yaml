@@ -1,0 +1,8 @@
+id: SPW_ADV_MAW
+name: The Elder Maw
+templateId: BOSS_ELDER_MAW
+roomId: R4004
+maxInstances: 1
+spawnInterval: 5m
+initialCount: 1
+respawnDelay: 1h

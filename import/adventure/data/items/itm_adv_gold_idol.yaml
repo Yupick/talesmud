@@ -1,0 +1,7 @@
+id: ITM_ADV_GOLD_IDOL
+name: Gilded Vault Idol
+description: A fist-sized idol of solid gold, looted from a king's hands. Collectors will pay a fortune.
+type: collectible
+level: 10
+quality: normal
+basePrice: 200

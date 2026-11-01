@@ -1,0 +1,8 @@
+id: SPW_FROST_WOLF_01
+name: Frostspine Wolves
+templateId: ENM_FROST_WOLF
+roomId: R3003
+maxInstances: 2
+spawnInterval: 2m
+initialCount: 1
+respawnDelay: 5m

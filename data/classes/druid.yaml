@@ -1,0 +1,98 @@
+id: druid
+name: Druid
+description: "Deep grove. You mark with fae fire, then wear a bark shield while the burn works."
+armor_type: Leather
+combat_type: Magic
+school: nature
+primary: INT
+skill_class: druid
+order: 5
+aliases: [druida, tpl-druid]
+races: [human, elf]
+portrait_class: druid
+hp_multiplier: 0.90
+caster: true
+hotbar_cap: 4
+inscribe_basic: true
+balance:
+  damage_dealt: 1.10
+  damage_taken: 1.15
+  behind_dealt: 1.15
+  swings: 1
+template:
+  id: tpl-druid
+  backstory: "You learned the grove's names before you learned the town's."
+  origin_area: Deep Grove
+  archetype: druid
+  race: elf
+  str: 5
+  dex: 8
+  int: 16
+  wis: 16
+  sta: 10
+  mana: 44
+  starting_items:
+    - {slot: main_hand, name: Wooden Staff}
+    - {slot: chest, name: Leather Armor}
+  default_skills: [druid_inscribe]
+skills:
+  - id: druid_inscribe
+    name: Fae Fire
+    effect: inscribe
+    level: 1
+    once_per_fight: false
+    keeps_swing: false
+    cooldown: 4
+    mana_cost: 6
+    component: nature_herb
+    multiplier: 0
+    target: enemy
+    tooltip: "Nature. Mark them with fae fire. 4 a round for 3 rounds. Refresh, no stack."
+  - id: druid_glyph
+    name: Bark Shield
+    effect: glyph
+    level: 4
+    once_per_fight: true
+    keeps_swing: false
+    cooldown: 0
+    mana_cost: 8
+    component: nature_herb
+    multiplier: 0
+    target: enemy
+    tooltip: "Nature. Once a fight. Living bark cuts the next hit on you by 4."
+  - id: druid_renew
+    name: Rejuvenate
+    effect: renew
+    level: 5
+    once_per_fight: false
+    keeps_swing: false
+    cooldown: 5
+    mana_cost: 10
+    component: nature_herb
+    multiplier: 0.10
+    target: ally
+    tooltip: "Nature. Renew an ally (or yourself), healing 10% of your max HP per round for 3 rounds."
+  - id: druid_sear
+    name: Wildfire
+    effect: sear
+    level: 8
+    once_per_fight: false
+    keeps_swing: false
+    cooldown: 4
+    mana_cost: 12
+    component: nature_herb
+    multiplier: 1.60
+    target: enemy
+    tooltip: "A nature cast at 1.60×. No burn. Replaces your swing this round."
+  - id: druid_mend
+    name: Verdant Mend
+    effect: mend
+    level: 9
+    once_per_fight: false
+    keeps_swing: false
+    cooldown: 4
+    mana_cost: 12
+    component: nature_herb
+    multiplier: 0.25
+    target: ally
+    tooltip: "Nature. Mend an ally (or yourself), restoring 25% of your max HP."

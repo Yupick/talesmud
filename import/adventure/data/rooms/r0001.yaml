@@ -1,0 +1,20 @@
+id: R0001
+name: Awakening
+area: Millstone Hollow
+description: 'A sleepy village lane at dawn. Millstone Hollow''s cottages huddle around a worn fountain,
+  and the smell of fresh bread drifts from the bakery. A notice board near the well lists the local militia''s
+  warnings: the old vault to the west has been breached, and the Frostspine Caverns to the east are crawling
+  again.'
+tags:
+- starting_room
+- safe
+canBind: true
+exits:
+- name: north
+  target: R1001
+  type: normal
+  description: Follow the lane toward the Training Grounds.
+- name: south
+  target: R0002
+  type: normal
+  description: Take the Old Mill Road out of the village.

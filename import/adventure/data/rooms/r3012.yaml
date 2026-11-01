@@ -1,0 +1,10 @@
+id: R3012
+name: Frozen Throne
+area: Frostspine Caverns
+description: 'The heart of the caverns: a palace of ice lit by blue fire. The Frostspine Matriarch coils
+  on a throne of glacier ice, ancient and vast, mother of every wolf that howls in the Frostspine.'
+exits:
+- name: up
+  target: R3011
+  type: normal
+  description: Flee back up the Matriarch's Descent.

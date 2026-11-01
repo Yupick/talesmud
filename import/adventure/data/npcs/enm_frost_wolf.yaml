@@ -1,0 +1,20 @@
+id: ENM_FROST_WOLF
+name: Frostspine Wolf
+description: A pale, ice-eyed wolf, lean and quick as a thrown knife.
+level: 12
+maxHitPoints: 45
+enemyTrait:
+  difficulty: normal
+  attackPower: 8
+  defense: 3
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 140
+  goldDrop:
+    min: 12
+    max: 25
+  lootTableId: LT_ADV_FROST_TRASH
+  creatureType: beast
+  combatStyle: skirmisher

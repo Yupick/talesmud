@@ -1,0 +1,7 @@
+id: ITM_ADV_LEVIATHAN_SCALE
+name: Leviathan Scale
+description: A scale the size of a barn door, shed by the Elder Maw. It turns blades like water.
+type: crafting_material
+level: 22
+quality: normal
+basePrice: 45

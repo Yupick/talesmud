@@ -1,0 +1,14 @@
+id: R4002
+name: Sunken Gallery
+area: The Elder Maw
+description: A drowned gallery of barnacled stone. Tentacles the length of oars — maw-tendrils, torn from
+  the thing below — twitch and grasp at anything that moves.
+exits:
+- name: up
+  target: R4001
+  type: normal
+  description: Climb back to the Abyssal Rift.
+- name: east
+  target: R4003
+  type: normal
+  description: Crawl toward the Gullet.

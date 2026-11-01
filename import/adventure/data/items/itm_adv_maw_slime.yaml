@@ -1,0 +1,7 @@
+id: ITM_ADV_MAW_SLIME
+name: Elder Maw Slime
+description: A jar of black, briny slime from the abyss. It writhes against the glass.
+type: crafting_material
+level: 20
+quality: normal
+basePrice: 30

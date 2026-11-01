@@ -1,0 +1,33 @@
+id: QST_ADV_FIRST_STEPS
+name: First Steps
+description: 'Master Aldric''s trial for new recruits: break a practice dummy and find your focus in the
+  garden.'
+category: tutorial
+level: 1
+source:
+  type: npc
+  npcId: TUT_MENTOR
+objectives:
+- id: kill_dummy
+  type: kill
+  description: Break a practice dummy
+  targetId: ENM_TUT_DUMMY1
+  targetName: Practice Dummy
+  amount: 1
+  order: 1
+- id: visit_garden
+  type: visit
+  description: Find your focus in the Focus Garden
+  targetId: R1005
+  targetName: Focus Garden
+  amount: 1
+  order: 2
+rewards:
+  xp: 50
+  gold: 20
+  itemTemplateIds:
+  - ITM_ADV_HEALING_SALVE
+acceptDialogText: Take the practice sword in the yard, break a dummy, and then find your focus in the
+  garden. Report back when you're done.
+completeDialogText: Good. The forms are yours now. The vault gate is to the west — start there, and come
+  back alive.

@@ -1,0 +1,11 @@
+id: R4004
+name: Maw of the Deep
+area: The Elder Maw
+description: A vast, lightless gullet at the bottom of the world. The Elder Maw fills it — a leviathan
+  of the abyss, older than the village, older than the vaults. Its teeth are the size of barn doors. It
+  has noticed you.
+exits:
+- name: up
+  target: R4003
+  type: normal
+  description: Flee back up to the Gullet.

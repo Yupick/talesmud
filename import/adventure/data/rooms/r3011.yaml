@@ -1,0 +1,14 @@
+id: R3011
+name: Matriarch's Descent
+area: Frostspine Caverns
+description: A near-vertical shaft of blue ice, carved with claw marks. The cold here is a living thing,
+  and the howling below it has a matriarch's voice.
+exits:
+- name: up
+  target: R3010
+  type: normal
+  description: Climb back up to the Yeti Roost.
+- name: down
+  target: R3012
+  type: normal
+  description: Descend into the Frozen Throne.

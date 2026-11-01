@@ -1,0 +1,12 @@
+id: ITM_ADV_BREAD
+name: Hearth Bread
+description: A dense loaf from the Millstone Hollow bakery. Restores 15 hit points.
+type: consumable
+level: 1
+quality: normal
+basePrice: 3
+stackable: true
+maxStack: 5
+consumable: true
+attributes:
+  hp_restore: 15

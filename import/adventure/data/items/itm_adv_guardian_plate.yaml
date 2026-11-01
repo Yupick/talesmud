@@ -1,0 +1,10 @@
+id: ITM_ADV_GUARDIAN_PLATE
+name: Vault Guardian Plate
+description: Chest armor stripped from a vault golem's housing. +8 defense.
+type: armor
+level: 11
+quality: rare
+basePrice: 120
+slot: chest
+attributes:
+  defense: 8

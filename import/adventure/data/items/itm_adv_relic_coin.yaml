@@ -1,0 +1,7 @@
+id: ITM_ADV_RELIC_COIN
+name: Buried Relic Coin
+description: A gold coin stamped with the seal of the burial college. Relic-hunters pay well for these.
+type: collectible
+level: 5
+quality: normal
+basePrice: 25

@@ -1,0 +1,6 @@
+id: SCR_ADV_MAW_ADDS
+name: 'Elder Maw: Call the Spawn'
+description: The Elder Maw calls its spawn from the black water.
+type: npc_hook
+language: lua
+code: tales.combat.summon("ENM_MAW_SPAWN", 2)

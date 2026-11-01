@@ -1,0 +1,7 @@
+id: SCR_ADV_REVEAL_CELLAR
+name: Reveal the Smuggler's Cellar
+description: Hauls the rubble aside, opening the hidden way down from the Rubble Passage to the Smuggler's
+  Cellar.
+type: room_action
+language: lua
+code: tales.game.revealExit("R2004", "down", ctx.characterID)

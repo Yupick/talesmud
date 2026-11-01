@@ -1,0 +1,14 @@
+id: R3004
+name: Alpha's Perch
+area: Frostspine Caverns
+description: A raised ledge of black ice overlooks the den. The Frostspine Alpha stands here, scarred
+  and massive, the pack's will made flesh.
+exits:
+- name: west
+  target: R3003
+  type: normal
+  description: Return to the Wolf Den.
+- name: south
+  target: R3005
+  type: normal
+  description: Pick your way onto the Glacier Crevasse.

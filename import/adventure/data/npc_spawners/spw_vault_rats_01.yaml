@@ -1,0 +1,8 @@
+id: SPW_VAULT_RATS_01
+name: Vault Rats
+templateId: ENM_VAULT_RAT
+roomId: R2002
+maxInstances: 2
+spawnInterval: 2m
+initialCount: 1
+respawnDelay: 5m

@@ -1,0 +1,14 @@
+id: R3009
+name: Wyrm's Larder
+area: Frostspine Caverns
+description: The cave reeks of carrion. Frostspine wyrm — flightless, serpentine, and very hungry — nest
+  among the bones of their kills.
+exits:
+- name: north
+  target: R3008
+  type: normal
+  description: Climb back to the Shaman's Circle.
+- name: south
+  target: R3010
+  type: normal
+  description: Approach the Yeti Roost.

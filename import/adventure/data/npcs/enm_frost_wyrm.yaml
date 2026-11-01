@@ -1,0 +1,21 @@
+id: ENM_FROST_WYRM
+name: Frostspine Wyrm
+description: A flightless, serpentine wyrm that nests in the larder caves and eats whatever the pack drags
+  home.
+level: 14
+maxHitPoints: 60
+enemyTrait:
+  difficulty: normal
+  attackPower: 10
+  defense: 4
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 200
+  goldDrop:
+    min: 18
+    max: 35
+  lootTableId: LT_ADV_FROST_TRASH
+  creatureType: beast
+  combatStyle: skirmisher

@@ -1,0 +1,10 @@
+id: ITM_ADV_EMBER_RING
+name: Ember Gold Ring
+description: A ring of warm ember gold from the Reliquary. +1 strength.
+type: armor
+level: 8
+quality: magic
+basePrice: 60
+slot: ring1
+attributes:
+  strength: 1

@@ -1,0 +1,15 @@
+id: R2005
+name: Gallery of Kings
+area: The Buried Vault
+description: Stone effigies of buried kings line this gallery, their hands folded over rusted swords.
+  A bone knight in tarnished mail stands guard before the far door, and skeletons stir in the shadows
+  between the statues.
+exits:
+- name: west
+  target: R2004
+  type: normal
+  description: Return to the Rubble Passage.
+- name: east
+  target: R2006
+  type: normal
+  description: Enter the Ashen Library.

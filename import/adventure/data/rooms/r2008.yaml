@@ -1,0 +1,18 @@
+id: R2008
+name: Smuggler's Cellar
+area: The Buried Vault
+description: A hidden cellar the burial college never knew about. Crates of contraband wine and relic-hunters'
+  tools lie scattered among old coins and bones. Cultists of the Hollow Warden use this place as a way
+  station.
+exits:
+- name: up
+  target: R2004
+  type: normal
+  description: Climb back up the collapsed well to the Rubble Passage.
+- name: south
+  target: R2009
+  type: normal
+  description: Follow the passage to the Choir of Teeth.
+items:
+- ITM_ADV_RELIC_COIN
+- ITM_ADV_ANCIENT_BONE

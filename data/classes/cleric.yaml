@@ -1,0 +1,110 @@
+id: cleric
+name: Cleric
+description: "Temple bulwark. You stand in the front with blessed steel, absorb the blow, and call the light back to mend your allies."
+armor_type: Plate
+combat_type: Melee
+school: divine
+primary: WIS
+skill_class: cleric
+order: 4
+aliases: [clerigo, cleriga, tpl-cleric]
+races: [human, dwarf]
+portrait_class: cleric
+hp_multiplier: 1.00
+caster: true
+hotbar_cap: 4
+bolt_charges: 1
+balance:
+  damage_dealt: 0.90
+  damage_taken: 1.00
+  behind_dealt: 1.15
+  swings: 1
+template:
+  id: tpl-cleric
+  backstory: "You kept the shrine lantern lit and the ledger of debts paid in full."
+  origin_area: Temple
+  archetype: cleric
+  race: human
+  str: 11
+  dex: 6
+  int: 7
+  wis: 16
+  sta: 16
+  mana: 28
+  starting_items:
+    - {slot: main_hand, name: Simple Mace}
+    - {slot: chest, name: Leather Armor}
+  default_skills: [cleric_guard]
+skills:
+  - id: cleric_guard
+    name: Ward
+    effect: guard
+    level: 1
+    once_per_fight: true
+    keeps_swing: true
+    cooldown: 0
+    mana_cost: 8
+    component: divine_wax
+    multiplier: 0
+    target: ally
+    tooltip: "Divine. Once a fight. The next hit aimed at an ally hits you; guarding yourself, that hit stacks two Grit. You still swing."
+  - id: cleric_mend
+    name: Mend
+    effect: mend
+    level: 2
+    once_per_fight: false
+    keeps_swing: false
+    cooldown: 4
+    mana_cost: 10
+    component: divine_wax
+    multiplier: 0.30
+    target: ally
+    tooltip: "Divine. Heal an ally (or yourself) for 30% of your max HP."
+  - id: cleric_glyph
+    name: Sigil
+    effect: glyph
+    level: 4
+    once_per_fight: true
+    keeps_swing: false
+    cooldown: 0
+    mana_cost: 8
+    component: divine_wax
+    multiplier: 0
+    target: enemy
+    tooltip: "A holy sigil. Once a fight. The next hit on you is reduced by 4."
+  - id: cleric_slam
+    name: Blessed Strike
+    effect: slam
+    level: 6
+    once_per_fight: false
+    keeps_swing: false
+    cooldown: 4
+    mana_cost: 6
+    component: divine_wax
+    multiplier: 1.30
+    target: enemy
+    tooltip: "A blessed swing, 1.30×. Replaces your swing this round."
+  - id: cleric_renew
+    name: Renew
+    effect: renew
+    level: 7
+    once_per_fight: false
+    keeps_swing: false
+    cooldown: 6
+    mana_cost: 12
+    component: divine_wax
+    multiplier: 0.12
+    target: ally
+    tooltip: "Divine. Renew an ally (or yourself), healing 12% of your max HP per round for 3 rounds."
+  - id: cleric_bolt
+    name: Retribution
+    effect: bolt
+    level: 8
+    once_per_fight: true
+    keeps_swing: false
+    cooldown: 0
+    mana_cost: 10
+    component: divine_wax
+    multiplier: 0
+    target: enemy
+    tooltip: "Divine. Once a fight. Spend your swing. The next hit still lands, and the attacker takes it back as holy fire."

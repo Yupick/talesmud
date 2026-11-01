@@ -1,0 +1,25 @@
+id: BOSS_ELDER_MAW
+name: The Elder Maw
+description: A leviathan of the abyss, older than the village, older than the vaults. Its teeth are barn
+  doors, its hunger is older than memory, and when the fight turns against it, it calls its spawn from
+  the black water.
+level: 25
+maxHitPoints: 450
+enemyTrait:
+  difficulty: boss
+  attackPower: 22
+  defense: 10
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 5000
+  goldDrop:
+    min: 200
+    max: 400
+  lootTableId: LT_ADV_MAW_BOSS
+  onLowHealthScript: SCR_ADV_MAW_ADDS
+  lowHealthThreshold: 0.3
+  creatureType: aberration
+  combatStyle: boss
+  resetOnDisengage: true

@@ -1,0 +1,23 @@
+id: BOSS_FROST_ALPHA
+name: Frostspine Alpha
+description: The pack's will made flesh — scarred, massive, and twice as fast as anything its size has
+  a right to be.
+level: 14
+maxHitPoints: 150
+spawnRoomId: R3004
+enemyTrait:
+  difficulty: hard
+  attackPower: 14
+  defense: 6
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 500
+  goldDrop:
+    min: 20
+    max: 40
+  lootTableId: LT_ADV_FROST_MINI
+  creatureType: beast
+  combatStyle: skirmisher
+  resetOnDisengage: true

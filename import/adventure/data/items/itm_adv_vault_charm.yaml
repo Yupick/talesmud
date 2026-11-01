@@ -1,0 +1,10 @@
+id: ITM_ADV_VAULT_CHARM
+name: Charm of the Hollow Warden
+description: A cold iron charm that hums with the Warden's held breath. +2 wisdom.
+type: armor
+level: 10
+quality: magic
+basePrice: 90
+slot: neck
+attributes:
+  wisdom: 2

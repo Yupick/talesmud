@@ -1,0 +1,16 @@
+id: ENM_FROST_WHELP
+name: Frostspine Whelp
+description: A half-grown whelp, blue-fire quick, called from the Shaman's circle to defend its matriarch.
+level: 14
+maxHitPoints: 35
+enemyTrait:
+  difficulty: easy
+  attackPower: 9
+  defense: 2
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 120
+  creatureType: beast
+  combatStyle: skirmisher

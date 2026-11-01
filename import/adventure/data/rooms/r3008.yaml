@@ -1,0 +1,14 @@
+id: R3008
+name: Shaman's Circle
+area: Frostspine Caverns
+description: A ring of standing stones, each carved with a howling wolf. The Frostspine Shaman tends a
+  fire that burns blue in the center, calling the pack's spirits to heel.
+exits:
+- name: west
+  target: R3007
+  type: normal
+  description: Slip back to the Hot Springs.
+- name: south
+  target: R3009
+  type: normal
+  description: Descend to the Wyrm's Larder.

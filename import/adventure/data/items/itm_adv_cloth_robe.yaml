@@ -1,0 +1,11 @@
+id: ITM_ADV_CLOTH_ROBE
+name: Recruit's Cloth Robe
+description: A simple robe of undyed cloth, issued to every militia recruit. It keeps the wind off and
+  little else.
+type: armor
+level: 1
+quality: normal
+basePrice: 5
+slot: chest
+attributes:
+  defense: 2

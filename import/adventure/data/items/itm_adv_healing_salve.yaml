@@ -1,0 +1,12 @@
+id: ITM_ADV_HEALING_SALVE
+name: Healing Salve
+description: A tin of bitter herbal salve. Restores 50 hit points when applied.
+type: consumable
+level: 5
+quality: normal
+basePrice: 15
+stackable: true
+maxStack: 3
+consumable: true
+attributes:
+  hp_restore: 50

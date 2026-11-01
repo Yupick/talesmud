@@ -1,0 +1,8 @@
+id: SPW_VAULT_CULT_01
+name: Vault Cultists
+templateId: ENM_VAULT_CULTIST
+roomId: R2008
+maxInstances: 2
+spawnInterval: 2m
+initialCount: 1
+respawnDelay: 5m

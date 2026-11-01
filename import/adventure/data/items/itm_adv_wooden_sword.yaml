@@ -1,0 +1,13 @@
+id: ITM_ADV_WOODEN_SWORD
+name: Wooden Practice Sword
+description: A drill sword of pale beechwood, nicked from a thousand practice cuts. It will not win a
+  war, but it will teach you how to hold one.
+type: weapon
+level: 1
+quality: normal
+basePrice: 5
+slot: main_hand
+subType: sword
+attributes:
+  damage_min: 3
+  damage_max: 5

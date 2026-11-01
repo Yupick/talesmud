@@ -1,0 +1,14 @@
+id: R2001
+name: Vault Antechamber
+area: The Buried Vault
+description: A sealed stone gate stands open, its lock broken years ago. Beyond it, a dry antechamber
+  smells of dust and old wax. A stair descends into the dark.
+exits:
+- name: east
+  target: R0002
+  type: normal
+  description: Leave the vault and return to the Old Mill Road.
+- name: down
+  target: R2002
+  type: normal
+  description: Descend the stair into the Flooded Entry.

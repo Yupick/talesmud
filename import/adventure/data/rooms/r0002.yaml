@@ -1,0 +1,23 @@
+id: R0002
+name: Old Mill Road
+area: Millstone Hollow
+description: A rutted dirt road runs between fallow fields. To the west, a sealed stone gate marks the
+  entrance to the Buried Vault. To the east, the wind howls down from the Frostspine Caverns. A dark crack
+  in the earth to the north breathes cold, salted air — the Abyssal Rift.
+exits:
+- name: north
+  target: R0001
+  type: normal
+  description: Walk back to the village fountain.
+- name: east
+  target: R3001
+  type: normal
+  description: Descend toward the Frozen Mouth of the Frostspine Caverns.
+- name: west
+  target: R2001
+  type: normal
+  description: Approach the sealed gate of the Buried Vault.
+- name: down
+  target: R4001
+  type: normal
+  description: Climb down into the Abyssal Rift.

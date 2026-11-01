@@ -1,0 +1,23 @@
+id: BOSS_FROST_SHAMAN
+name: Frostspine Shaman
+description: The pack's spirit-keeper, calling the cold itself to heel. Its fire burns blue, and its howls
+  come back from the ice as answers.
+level: 15
+maxHitPoints: 165
+spawnRoomId: R3008
+enemyTrait:
+  difficulty: hard
+  attackPower: 15
+  defense: 6
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 600
+  goldDrop:
+    min: 25
+    max: 50
+  lootTableId: LT_ADV_FROST_MINI
+  creatureType: humanoid
+  combatStyle: caster
+  resetOnDisengage: true

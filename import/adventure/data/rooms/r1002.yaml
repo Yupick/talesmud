@@ -1,0 +1,22 @@
+id: R1002
+name: Weapon Practice Yard
+area: The Training Grounds
+description: Straw targets and weapon racks line this dusty yard. A wooden sword and a cloth robe lie
+  on a bench, left for the next recruit. The dirt is scarred with old footwork drills.
+exits:
+- name: south
+  target: R1001
+  type: normal
+  description: Step back onto the Mentor's Porch.
+- name: east
+  target: R1003
+  type: normal
+  description: Walk toward the Dummy Row.
+actions:
+- name: practice stances
+  type: response
+  description: Run through the basic stances.
+  response: You move through the drill forms. Your shoulders loosen; the forms start to feel natural.
+    (+combat readiness)
+items:
+- ITM_ADV_WOODEN_SWORD

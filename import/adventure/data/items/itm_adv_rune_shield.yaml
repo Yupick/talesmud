@@ -1,0 +1,10 @@
+id: ITM_ADV_RUNE_SHIELD
+name: Rune-Etched Vault Shield
+description: A burial shield etched with warding runes. +5 defense.
+type: armor
+level: 7
+quality: magic
+basePrice: 55
+slot: off_hand
+attributes:
+  defense: 5

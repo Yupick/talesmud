@@ -1,0 +1,7 @@
+id: ITM_ADV_FROST_CRYSTAL
+name: Frostspine Crystal
+description: A shard of blue glacier ice that never melts. It hums faintly.
+type: crafting_material
+level: 12
+quality: normal
+basePrice: 20

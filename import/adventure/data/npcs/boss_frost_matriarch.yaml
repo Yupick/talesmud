@@ -1,0 +1,25 @@
+id: BOSS_FROST_MATRIARCH
+name: The Frostspine Matriarch
+description: Ancient and vast, the mother of every wolf that howls in the Frostspine. She coils on her
+  throne of glacier ice, and when the fight turns against her, she calls her last whelps from the blue
+  fire.
+level: 17
+maxHitPoints: 260
+enemyTrait:
+  difficulty: boss
+  attackPower: 18
+  defense: 8
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 2000
+  goldDrop:
+    min: 40
+    max: 80
+  lootTableId: LT_ADV_MATRIARCH
+  onLowHealthScript: SCR_ADV_MATRIARCH_ADDS
+  lowHealthThreshold: 0.3
+  creatureType: beast
+  combatStyle: boss
+  resetOnDisengage: true

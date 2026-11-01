@@ -1,0 +1,16 @@
+id: R1005
+name: Focus Garden
+area: The Training Grounds
+description: A quiet garden of moss and smooth stones behind the training yards. A loaf of bread rests
+  on a flat rock — someone's lunch, left untouched. The silence here is a lesson of its own.
+exits:
+- name: west
+  target: R1004
+  type: normal
+  description: Return to the Footwork Circle.
+- name: north
+  target: R1006
+  type: normal
+  description: Pass through the Grounds Gate.
+items:
+- ITM_ADV_BREAD

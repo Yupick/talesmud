@@ -1,0 +1,7 @@
+id: ITM_ADV_WOLF_PELT
+name: Frostspine Wolf Pelt
+description: A silver-white pelt, warm as a banked fire. Tailors prize them.
+type: crafting_material
+level: 12
+quality: normal
+basePrice: 15

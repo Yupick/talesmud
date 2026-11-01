@@ -1,0 +1,19 @@
+id: R3007
+name: Hot Springs
+area: Frostspine Caverns
+description: Warm water bubbles up through the ice, filling a series of natural pools. The steam is a
+  mercy after the cold. Wolf pelts and frost crystals lie drying on the rocks — supplies left by hunters
+  who made it this far.
+canBind: true
+exits:
+- name: north
+  target: R3006
+  type: normal
+  description: Cross back over the Troll Bridge.
+- name: east
+  target: R3008
+  type: normal
+  description: Enter the Shaman's Circle.
+items:
+- ITM_ADV_FROST_CRYSTAL
+- ITM_ADV_WOLF_PELT

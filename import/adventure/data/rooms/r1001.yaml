@@ -1,0 +1,19 @@
+id: R1001
+name: Mentor's Porch
+area: The Training Grounds
+description: A wide wooden porch overlooks the training yards. Master Aldric, the village militia's old
+  drill sergeant, leans on a practice post and watches new recruits with a patient eye. He offers guidance
+  to anyone willing to learn.
+tags:
+- tutorial
+- safe
+canBind: true
+exits:
+- name: south
+  target: R0001
+  type: normal
+  description: Return to the village lane.
+- name: north
+  target: R1002
+  type: normal
+  description: Enter the Weapon Practice Yard.

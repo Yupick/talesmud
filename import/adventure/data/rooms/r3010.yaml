@@ -1,0 +1,14 @@
+id: R3010
+name: Yeti Roost
+area: Frostspine Caverns
+description: A high, white cavern where frostspine yetis nest in drifts of shed fur. The pack leader sits
+  on a throne of frozen kills, watching the only way in.
+exits:
+- name: north
+  target: R3009
+  type: normal
+  description: Return to the Wyrm's Larder.
+- name: down
+  target: R3011
+  type: normal
+  description: Descend the Matriarch's Descent.

@@ -1,0 +1,20 @@
+id: ENM_FROST_TROLL
+name: Frostspine Troll
+description: A shaggy troll with ice in its beard and a toll-keeper's patience.
+level: 13
+maxHitPoints: 55
+enemyTrait:
+  difficulty: normal
+  attackPower: 9
+  defense: 4
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 170
+  goldDrop:
+    min: 15
+    max: 30
+  lootTableId: LT_ADV_FROST_TRASH
+  creatureType: giant
+  combatStyle: brute

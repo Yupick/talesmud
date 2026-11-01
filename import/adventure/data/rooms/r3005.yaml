@@ -1,0 +1,21 @@
+id: R3005
+name: Glacier Crevasse
+area: Frostspine Caverns
+description: A river of ice splits the cavern, bridged only by a natural arch of blue glacier ice. The
+  arch is thin, and the crevasse below has no visible bottom.
+exits:
+- name: north
+  target: R3004
+  type: normal
+  description: Climb back to the Alpha's Perch.
+- name: east
+  target: R3006
+  type: normal
+  description: Cross to the Troll Bridge.
+actions:
+- name: cross the ice bridge
+  type: response
+  description: Test the glacier arch.
+  response: The arch sings under your weight — a high, wrong note. A crack races across the ice and you
+    leap back as a slab shears away into the crevasse. You take 4 damage from the scramble. The arch will
+    hold, but only just, and only for one at a time.

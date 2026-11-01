@@ -1,0 +1,12 @@
+id: LT_ADV_TUT_DUMMY
+name: Practice Dummy Loot
+description: What the training dummies have collected over the years.
+entries:
+- itemTemplateId: ITM_ADV_WOODEN_SWORD
+  dropChance: 0.3
+  minQuantity: 1
+  maxQuantity: 1
+- itemTemplateId: ITM_ADV_CLOTH_ROBE
+  dropChance: 0.2
+  minQuantity: 1
+  maxQuantity: 1

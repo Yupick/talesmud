@@ -1,0 +1,20 @@
+id: ENM_VAULT_RAT
+name: Vault Rat
+description: A bold, greasy rat the size of a boot, fat on centuries of raided supplies.
+level: 6
+maxHitPoints: 25
+enemyTrait:
+  difficulty: normal
+  attackPower: 4
+  defense: 1
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 60
+  goldDrop:
+    min: 5
+    max: 15
+  lootTableId: LT_ADV_VAULT_TRASH
+  creatureType: beast
+  combatStyle: skirmisher

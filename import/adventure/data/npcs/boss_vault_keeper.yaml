@@ -1,0 +1,23 @@
+id: BOSS_VAULT_KEEPER
+name: Bone Knight Keeper
+description: A bone knight in tarnished mail, sworn to the burial college in life and unreleased in death.
+  It guards the Gallery of Kings.
+level: 8
+maxHitPoints: 90
+spawnRoomId: R2005
+enemyTrait:
+  difficulty: hard
+  attackPower: 9
+  defense: 4
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 250
+  goldDrop:
+    min: 10
+    max: 25
+  lootTableId: LT_ADV_VAULT_MINI
+  creatureType: undead
+  combatStyle: soldier
+  resetOnDisengage: true

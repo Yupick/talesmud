@@ -1,0 +1,14 @@
+id: ITM_ADV_RELIC_BLADE
+name: Relic Blade of the Vault
+description: The burial college's masterwork, drawn from its reliquary. +18-26 damage. Only one may be
+  held.
+type: weapon
+level: 11
+quality: legendary
+basePrice: 300
+slot: main_hand
+subType: sword
+unique: true
+attributes:
+  damage_min: 18
+  damage_max: 26

@@ -1,0 +1,11 @@
+id: R2013
+name: Hollow Warden's Sanctum
+area: The Buried Vault
+description: A circular chamber at the heart of the vault. In its center, the Hollow Warden kneels in
+  its burial armor, a crown of fused ribs on its helm. It has guarded this crypt for three hundred years.
+  It does not intend to stop.
+exits:
+- name: up
+  target: R2012
+  type: normal
+  description: Flee back up to the Warden's Threshold.

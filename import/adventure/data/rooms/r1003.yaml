@@ -1,0 +1,16 @@
+id: R1003
+name: Dummy Row
+area: The Training Grounds
+description: Two straw-stuffed training dummies stand on a rail, their painted grins faded. They are meant
+  to be hit, not to hit back — perfect for a first lesson.
+exits:
+- name: west
+  target: R1002
+  type: normal
+  description: Return to the Weapon Practice Yard.
+- name: north
+  target: R1004
+  type: normal
+  description: Continue to the Footwork Circle.
+items:
+- ITM_ADV_CLOTH_ROBE

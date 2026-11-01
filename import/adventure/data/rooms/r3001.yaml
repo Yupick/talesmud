@@ -1,0 +1,14 @@
+id: R3001
+name: Frozen Mouth
+area: Frostspine Caverns
+description: The entrance to the Frostspine Caverns gapes like a frozen jaw. Icicles the length of swords
+  hang from the lip, and the wind that pours out smells of wolf and old ice.
+exits:
+- name: west
+  target: R0002
+  type: normal
+  description: Climb back up to the Old Mill Road.
+- name: down
+  target: R3002
+  type: normal
+  description: Descend the Icy Descent.

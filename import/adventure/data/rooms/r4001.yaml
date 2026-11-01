@@ -1,0 +1,14 @@
+id: R4001
+name: Abyssal Rift
+area: The Elder Maw
+description: A crack in the world, wide enough to swallow the mill. The walls are wet with black water,
+  and the air tastes of brine and old hunger. Something enormous shifts in the deep below.
+exits:
+- name: up
+  target: R0002
+  type: normal
+  description: Climb back up to the Old Mill Road.
+- name: down
+  target: R4002
+  type: normal
+  description: Descend into the Sunken Gallery.

@@ -1,0 +1,11 @@
+id: ITM_ADV_GLACIAL_PENDANT
+name: Glacial Pendant
+description: A pendant of never-melting ice on a silver chain. +2 defense, +1 wisdom.
+type: armor
+level: 13
+quality: rare
+basePrice: 130
+slot: neck
+attributes:
+  defense: 2
+  wisdom: 1

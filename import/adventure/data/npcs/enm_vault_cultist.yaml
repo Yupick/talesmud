@@ -1,0 +1,20 @@
+id: ENM_VAULT_CULTIST
+name: Cultist of the Hollow Warden
+description: A relic-hunter turned zealot, tending the Warden's flock of bones.
+level: 8
+maxHitPoints: 35
+enemyTrait:
+  difficulty: normal
+  attackPower: 6
+  defense: 2
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 90
+  goldDrop:
+    min: 8
+    max: 20
+  lootTableId: LT_ADV_VAULT_TRASH
+  creatureType: humanoid
+  combatStyle: caster

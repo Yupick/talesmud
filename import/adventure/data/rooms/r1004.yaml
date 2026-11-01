@@ -1,0 +1,19 @@
+id: R1004
+name: Footwork Circle
+area: The Training Grounds
+description: 'A flat circle of packed earth, ringed with chalk marks. Footwork drills are called out here:
+  advance, retreat, pivot, hold.'
+exits:
+- name: south
+  target: R1003
+  type: normal
+  description: Step back to the Dummy Row.
+- name: east
+  target: R1005
+  type: normal
+  description: Slip into the Focus Garden.
+actions:
+- name: drill footwork
+  type: response
+  description: Practice the footwork drill.
+  response: You drill the footwork pattern until your feet know it without asking. (+combat readiness)

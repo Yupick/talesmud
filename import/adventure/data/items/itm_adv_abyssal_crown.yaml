@@ -1,0 +1,13 @@
+id: ITM_ADV_ABYSSAL_CROWN
+name: Abyssal Crown
+description: A crown of barnacled gold and maw-bone, fit for the thing that rules the deep. +10 defense,
+  +4 wisdom. Only one may be held.
+type: armor
+level: 25
+quality: mythic
+basePrice: 1500
+slot: head
+unique: true
+attributes:
+  defense: 10
+  wisdom: 4

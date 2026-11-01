@@ -1,0 +1,25 @@
+id: BOSS_HOLLOW_WARDEN
+name: The Hollow Warden
+description: Three hundred years dead and still on duty. The Hollow Warden kneels in its burial armor,
+  a crown of fused ribs on its helm, and the held breath of the whole vault hums in its chest. When the
+  fight turns against it, it calls the vault's lost wisps to its side.
+level: 11
+maxHitPoints: 180
+enemyTrait:
+  difficulty: boss
+  attackPower: 14
+  defense: 6
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 1200
+  goldDrop:
+    min: 30
+    max: 60
+  lootTableId: LT_ADV_WARDEN
+  onLowHealthScript: SCR_ADV_WARDEN_ADDS
+  lowHealthThreshold: 0.3
+  creatureType: undead
+  combatStyle: boss
+  resetOnDisengage: true

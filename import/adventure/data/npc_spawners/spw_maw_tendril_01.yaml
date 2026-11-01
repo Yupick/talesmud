@@ -1,0 +1,8 @@
+id: SPW_MAW_TENDRIL_01
+name: Maw Tendrils
+templateId: ENM_MAW_TENDRIL
+roomId: R4002
+maxInstances: 2
+spawnInterval: 1m
+initialCount: 1
+respawnDelay: 3m

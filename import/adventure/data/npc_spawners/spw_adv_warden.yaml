@@ -1,0 +1,8 @@
+id: SPW_ADV_WARDEN
+name: The Hollow Warden
+templateId: BOSS_HOLLOW_WARDEN
+roomId: R2013
+maxInstances: 1
+spawnInterval: 5m
+initialCount: 1
+respawnDelay: 30m

@@ -1,0 +1,8 @@
+id: SPW_VAULT_SKEL_01
+name: Vault Skeletons
+templateId: ENM_VAULT_SKELETON
+roomId: R2005
+maxInstances: 2
+spawnInterval: 2m
+initialCount: 1
+respawnDelay: 5m

@@ -1,0 +1,14 @@
+id: R2012
+name: Warden's Threshold
+area: The Buried Vault
+description: A vaulted antechamber before the sanctum. Two braziers burn with pale flame, and the air
+  hums with a low, patient note, like a held breath.
+exits:
+- name: north
+  target: R2011
+  type: normal
+  description: Return to the Ossuary.
+- name: down
+  target: R2013
+  type: normal
+  description: Descend into the Hollow Warden's Sanctum.

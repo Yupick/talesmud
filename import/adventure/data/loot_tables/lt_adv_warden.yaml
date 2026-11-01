@@ -1,0 +1,24 @@
+id: LT_ADV_WARDEN
+name: Hollow Warden Loot
+description: The burial college's masterworks, kept by the Hollow Warden.
+entries:
+- itemTemplateId: ITM_ADV_BURIAL_MASK
+  dropChance: 0.15
+  minQuantity: 1
+  maxQuantity: 1
+  rarity: unique
+  boss_only: true
+- itemTemplateId: ITM_ADV_RELIC_BLADE
+  dropChance: 0.1
+  minQuantity: 1
+  maxQuantity: 1
+  rarity: unique
+  boss_only: true
+- itemTemplateId: ITM_ADV_VAULT_CHARM
+  dropChance: 0.2
+  minQuantity: 1
+  maxQuantity: 1
+- itemTemplateId: ITM_ADV_GOLD_IDOL
+  dropChance: 0.25
+  minQuantity: 1
+  maxQuantity: 1

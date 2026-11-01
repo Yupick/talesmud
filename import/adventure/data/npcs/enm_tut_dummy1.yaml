@@ -1,0 +1,22 @@
+id: ENM_TUT_DUMMY1
+name: Practice Dummy
+description: A straw-stuffed training dummy with a painted grin. It has survived a thousand practice swings
+  and asks nothing but another.
+level: 1
+maxHitPoints: 10
+spawnRoomId: R1003
+enemyTrait:
+  difficulty: trivial
+  attackPower: 1
+  defense: 0
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 20
+  goldDrop:
+    min: 1
+    max: 3
+  lootTableId: LT_ADV_TUT_DUMMY
+  creatureType: training
+  combatStyle: dummy

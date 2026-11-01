@@ -1,0 +1,16 @@
+id: ENM_MAW_SPAWN
+name: Maw Spawn
+description: A fist-sized horror of teeth and brine, born from the Elder Maw's own flesh to defend it.
+level: 20
+maxHitPoints: 70
+enemyTrait:
+  difficulty: easy
+  attackPower: 13
+  defense: 5
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 250
+  creatureType: aberration
+  combatStyle: skirmisher

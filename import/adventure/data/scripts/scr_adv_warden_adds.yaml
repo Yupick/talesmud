@@ -1,0 +1,6 @@
+id: SCR_ADV_WARDEN_ADDS
+name: 'Hollow Warden: Call the Wisps'
+description: The Hollow Warden calls the vault's lost wisps to its side.
+type: npc_hook
+language: lua
+code: tales.combat.summon("ENM_VAULT_WISP", 1)

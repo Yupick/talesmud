@@ -1,0 +1,14 @@
+id: ITM_ADV_ICEFORGE_BLADE
+name: Iceforge Blade
+description: A greatsword forged in glacier fire and quenched in the Matriarch's own cold. +28-40 damage.
+  Only one may be held.
+type: weapon
+level: 15
+quality: legendary
+basePrice: 500
+slot: main_hand
+subType: twohandsword
+unique: true
+attributes:
+  damage_min: 28
+  damage_max: 40

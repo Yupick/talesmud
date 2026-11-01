@@ -1,0 +1,24 @@
+id: R2004
+name: Rubble Passage
+area: The Buried Vault
+description: The ceiling has collapsed here, choking the passage with broken masonry. Through a gap in
+  the rubble, a cold draft rises from somewhere below — a way down, if the debris can be cleared.
+exits:
+- name: west
+  target: R2003
+  type: normal
+  description: Back away to the Hall of Echoes.
+- name: east
+  target: R2005
+  type: normal
+  description: Continue into the Gallery of Kings.
+- name: down
+  target: R2008
+  type: normal
+  description: Climb down through the collapsed well.
+  hidden: true
+actions:
+- name: clear rubble
+  type: script
+  description: Haul the debris aside to open the way down.
+  scriptId: SCR_ADV_REVEAL_CELLAR

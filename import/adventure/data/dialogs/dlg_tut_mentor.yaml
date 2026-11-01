@@ -1,0 +1,28 @@
+id: DLG_TUT_MENTOR
+name: Master Aldric
+type: npc
+npc_ref: TUT_MENTOR
+description: The militia's old drill sergeant offers guidance to new recruits.
+tree:
+  root:
+    npc_text: Well now. Another recruit, come to learn the forms before the world teaches them to you
+      the hard way. Ask what you need, and mind the dummies — they bite back less than the vault does.
+    options:
+    - player_text: How do I begin my training?
+      next: training
+    - player_text: Any advice for the vaults and caverns?
+      next: advice
+  training:
+    npc_text: 'Start in the yards: take the practice sword, work the stances, and break a dummy or two.
+      When the forms feel like yours, the vault gate to the west will stop frightening you. Much.'
+    options:
+    - player_text: Thank you, Master Aldric.
+      next: ''
+  advice:
+    npc_text: The Buried Vault rewards the patient — watch the floors, and mind the rubble; some ways
+      down are hidden until you clear them. The Frostspine rewards the warm — rest at the hot springs
+      when you can. And if you find the Abyssal Rift... go with friends. The Maw eats parties of one for
+      breakfast.
+    options:
+    - player_text: I'll remember that.
+      next: ''

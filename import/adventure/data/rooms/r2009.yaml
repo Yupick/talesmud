@@ -1,0 +1,14 @@
+id: R2009
+name: Choir of Teeth
+area: The Buried Vault
+description: The walls of this ossuary are mortared with finger bones, arranged in patterns that might
+  be hymns. The Vault Acolyte chants here, tending the Warden's flock of teeth.
+exits:
+- name: north
+  target: R2008
+  type: normal
+  description: Return to the Smuggler's Cellar.
+- name: east
+  target: R2010
+  type: normal
+  description: Enter the Reliquary.

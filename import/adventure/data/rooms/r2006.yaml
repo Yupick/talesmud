@@ -1,0 +1,14 @@
+id: R2006
+name: Ashen Library
+area: The Buried Vault
+description: Shelves of fire-blackened ledgers fill this vaulted room. Whatever burned here took the records
+  of the whole burial college with it. A stair leads down to the lower galleries.
+exits:
+- name: west
+  target: R2005
+  type: normal
+  description: Step back into the Gallery of Kings.
+- name: south
+  target: R2007
+  type: normal
+  description: Descend to the Crumbling Bridge.

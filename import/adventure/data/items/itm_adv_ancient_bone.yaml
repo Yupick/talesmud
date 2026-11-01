@@ -1,0 +1,7 @@
+id: ITM_ADV_ANCIENT_BONE
+name: Ancient Vault Bone
+description: A bone from the vault's ossuaries, yellowed and hard as iron. Crafters prize them.
+type: crafting_material
+level: 6
+quality: normal
+basePrice: 8

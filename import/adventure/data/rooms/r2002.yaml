@@ -1,0 +1,14 @@
+id: R2002
+name: Flooded Entry
+area: The Buried Vault
+description: Knee-deep black water fills the entry hall of the vault. Something rustles beneath the surface
+  — rats, fat and bold from years of raiding supply carts.
+exits:
+- name: up
+  target: R2001
+  type: normal
+  description: Climb back up to the Vault Antechamber.
+- name: east
+  target: R2003
+  type: normal
+  description: Wade toward the Hall of Echoes.

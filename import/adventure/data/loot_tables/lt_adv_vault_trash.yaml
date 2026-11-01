@@ -1,0 +1,12 @@
+id: LT_ADV_VAULT_TRASH
+name: Vault Trash Loot
+description: Scraps and salvage from the vault's lesser dead.
+entries:
+- itemTemplateId: ITM_ADV_ANCIENT_BONE
+  dropChance: 0.3
+  minQuantity: 1
+  maxQuantity: 1
+- itemTemplateId: ITM_ADV_RELIC_COIN
+  dropChance: 0.4
+  minQuantity: 1
+  maxQuantity: 1

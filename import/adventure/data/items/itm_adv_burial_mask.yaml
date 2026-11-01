@@ -1,0 +1,13 @@
+id: ITM_ADV_BURIAL_MASK
+name: Mask of the Buried Kings
+description: A funerary mask of fused rib-bone and gold. +4 defense, +2 intelligence. Only one may be
+  held.
+type: armor
+level: 9
+quality: rare
+basePrice: 150
+slot: head
+unique: true
+attributes:
+  defense: 4
+  intelligence: 2

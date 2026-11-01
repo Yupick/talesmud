@@ -1,0 +1,31 @@
+id: QST_ADV_HOLLOW_WARDEN
+name: The Hollow Warden
+description: The Hollow Warden has guarded the Buried Vault for three hundred years. It is time someone
+  made it rest.
+category: dungeon
+level: 8
+source:
+  type: auto
+objectives:
+- id: kill_warden
+  type: kill
+  description: Destroy the Hollow Warden
+  targetId: BOSS_HOLLOW_WARDEN
+  targetName: The Hollow Warden
+  amount: 1
+  order: 1
+- id: visit_sanctum
+  type: visit
+  description: Set foot in the Hollow Warden's Sanctum
+  targetId: R2013
+  targetName: Hollow Warden's Sanctum
+  amount: 1
+  order: 2
+rewards:
+  xp: 800
+  gold: 150
+  itemTemplateIds:
+  - ITM_ADV_RELIC_BLADE
+acceptDialogText: The Hollow Warden waits in the deepest sanctum of the Buried Vault. End its vigil.
+completeDialogText: The Warden falls, and the vault's held breath finally exhales. Millstone Hollow will
+  sleep easier tonight.

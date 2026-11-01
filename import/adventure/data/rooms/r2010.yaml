@@ -1,0 +1,16 @@
+id: R2010
+name: Reliquary
+area: The Buried Vault
+description: 'Glass cases line this room, most of them shattered. What remains glitters: a ring of ember
+  gold, still warm to the touch, left behind by thieves in a hurry.'
+exits:
+- name: west
+  target: R2009
+  type: normal
+  description: Step back into the Choir of Teeth.
+- name: south
+  target: R2011
+  type: normal
+  description: Descend into the Ossuary.
+items:
+- ITM_ADV_EMBER_RING

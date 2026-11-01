@@ -1,0 +1,22 @@
+id: BOSS_FROST_YETI
+name: Frostspine Yeti
+description: The pack leader, a mountain of white fur and bad temper, enthroned on frozen kills.
+level: 16
+maxHitPoints: 185
+spawnRoomId: R3010
+enemyTrait:
+  difficulty: hard
+  attackPower: 16
+  defense: 7
+  attackSpeed: 1.0
+  aggroRadius: 0
+  aggroOnSight: false
+  callForHelp: false
+  xpReward: 700
+  goldDrop:
+    min: 30
+    max: 60
+  lootTableId: LT_ADV_FROST_MINI
+  creatureType: giant
+  combatStyle: brute
+  resetOnDisengage: true

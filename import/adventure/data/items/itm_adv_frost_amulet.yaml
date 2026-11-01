@@ -1,0 +1,10 @@
+id: ITM_ADV_FROST_AMULET
+name: Amulet of the Frozen Throne
+description: A blue-fire amulet torn from the Matriarch's circle. +2 intelligence.
+type: armor
+level: 16
+quality: rare
+basePrice: 220
+slot: neck
+attributes:
+  intelligence: 2
