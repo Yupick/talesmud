@@ -18,13 +18,24 @@ export const PANEL_ORDER = [
   'map',
   'friends',
   'party',
+  'clan',
+  'dms',
+  'classesEditor',
+  'dungeonBuilder',
+  'npcFactory',
+  'audit',
   'inventory',
+  'inventoryQuick',   // ← NUEVO: inventory quick toggle con tecla I (tecla I)
+  'spellbook',
   'battleOutcome',
   'battleDock',
   'accountMenu',
   'widgetFocus',
   'editMode',
 ];
+
+/** Tecla I → inventory quick toggle (mismo panel, alternar abrir/cerrar). */
+export const KEY_INVENTORY_QUICK = 'I';
 
 export function topOpenPanel(flags) {
   if (!flags) return '';

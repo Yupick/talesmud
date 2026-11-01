@@ -4,7 +4,7 @@ import { onMount, setContext, getContext } from "svelte";
 import { writable } from "svelte/store";
 import createAuth0Client from "@auth0/auth0-spa-js";
 import { returnTarget } from "./activate/activateFlow.js";
-import { clearGuestToken, clearLocalSession, readGuestToken, restoredSession } from "./authSession.js";
+import { clearGuestToken, clearLocalSession, clearLocalToken, readGuestToken, readLocalToken, restoredSession } from "./authSession.js";
 
 const isLoading = writable(true);
 const isAuthenticated = writable(false);
@@ -23,6 +23,21 @@ function createAuth(config) {
 
   onMount(async () => {
     if (!config || !config.domain || !config.client_id) {
+      // Auth0 is optional. Restore a local username/password session or a
+      // guest session so a reload keeps the player signed in.
+      const localToken = readLocalToken();
+      const guestToken = readGuestToken();
+      if (localToken) {
+        // A real account outranks a guest session left in this tab.
+        clearGuestToken();
+        authToken.set(localToken);
+        isAuthenticated.set(true);
+      } else if (guestToken) {
+        authToken.set(guestToken);
+        isAuthenticated.set(true);
+      } else {
+        isAuthenticated.set(false);
+      }
       isLoading.set(false);
       return;
     }
@@ -64,18 +79,25 @@ function createAuth(config) {
 
       const _isAuthenticated = await auth0.isAuthenticated();
       const guestToken = readGuestToken();
-      // Auth0 wins. A guest token is restored only when this tab is not signed in,
-      // so a reload keeps a guest in the game. Logout clears that token first.
+      const localToken = readLocalToken();
+      // Auth0 wins. Otherwise a stored local account, then a guest token, is
+      // restored so a reload keeps the player in the game. Logout clears both.
       const sessionKind = restoredSession({
         auth0Authenticated: _isAuthenticated,
         guestToken,
+        localToken,
       });
 
       if (sessionKind === "auth0") {
-        // Drop a guest token left over from this tab so logout cannot fall
-        // back into that guest. Leave the character-picker flag alone so a
-        // reload does not open the picker again.
+        // Drop a guest or local token left over from this tab so logout cannot
+        // fall back into it. Leave the character-picker flag alone so a reload
+        // does not open the picker again.
         clearGuestToken();
+        clearLocalToken();
+        isAuthenticated.set(true);
+      } else if (sessionKind === "local") {
+        clearGuestToken();
+        authToken.set(localToken);
         isAuthenticated.set(true);
       } else if (sessionKind === "guest") {
         authToken.set(guestToken);
@@ -129,7 +151,13 @@ function createAuth(config) {
       console.error("Failed to initialize Auth0:", initError);
       authError.set(initError);
       const guestToken = readGuestToken();
-      if (guestToken && restoredSession({ auth0Authenticated: false, guestToken }) === "guest") {
+      const localToken = readLocalToken();
+      const kind = restoredSession({ auth0Authenticated: false, guestToken, localToken });
+      if (kind === "local") {
+        clearGuestToken();
+        authToken.set(localToken);
+        isAuthenticated.set(true);
+      } else if (kind === "guest") {
         authToken.set(guestToken);
         isAuthenticated.set(true);
       }

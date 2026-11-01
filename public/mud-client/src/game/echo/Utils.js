@@ -157,8 +157,10 @@ export function collectAutocompleteCandidates(callbacks, input) {
     }
   }, []);
 
-  // Filter only the ones starting with the expression
-  return all.filter(txt => txt.startsWith(expr));
+  // Filter only the ones starting with the expression (case-insensitive so
+  // `LOO` completes `look` and `jo` completes `John`).
+  const needle = expr.toLowerCase();
+  return all.filter(txt => String(txt).toLowerCase().startsWith(needle));
 }
 
 

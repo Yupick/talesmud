@@ -2,6 +2,7 @@
 // License for this code is Apach V2 as according to LICENSE file
 
 import { HistoryController } from "./HistoryController";
+import { HISTORY_LIMIT } from "../commandHistory.js";
 import {
   closestLeftBoundary,
   closestRightBoundary,
@@ -31,7 +32,7 @@ export default class LocalEchoController {
     this._handleTermData = this.handleTermData.bind(this);
     this._handleTermResize = this.handleTermResize.bind(this)
 
-    this.history = new HistoryController(options.historySize || 10);
+    this.history = new HistoryController(options.historySize || HISTORY_LIMIT);
     this.maxAutocompleteEntries = options.maxAutocompleteEntries || 100;
 
     this._autocompleteHandlers = [];
@@ -458,7 +459,7 @@ export default class LocalEchoController {
       switch (data.substr(1)) {
         case "[A": // Up arrow
           if (this.history) {
-            let value = this.history.getPrevious();
+            let value = this.history.getPrevious(this._input);
             if (value) {
               this.setInput(value);
               this.setCursor(value.length);
@@ -468,7 +469,7 @@ export default class LocalEchoController {
 
         case "[B": // Down arrow
           if (this.history) {
-            let value = this.history.getNext();
+            let value = this.history.getNext(this._input);
             if (!value) value = "";
             this.setInput(value);
             this.setCursor(value.length);

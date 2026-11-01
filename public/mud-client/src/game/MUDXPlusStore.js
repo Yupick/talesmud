@@ -510,6 +510,8 @@ function createStore() {
     dialogNpcText: "",
     dialogOptions: [],
     dialogConversationID: "",
+    dialogRelation: null,
+    dialogFreeText: false,
 
     // Merchant shop overlay
     shop: null,
@@ -711,13 +713,15 @@ function createStore() {
     },
 
     // Dialog methods
-    setDialog: (npcName, npcText, options, conversationID) => {
+    setDialog: (npcName, npcText, options, conversationID, relation = null, freeText = false) => {
       update((state) => {
         state.dialogActive = true;
         state.dialogNpcName = npcName || "";
         state.dialogNpcText = npcText || "";
         state.dialogOptions = options || [];
         state.dialogConversationID = conversationID || "";
+        state.dialogRelation = relation || null;
+        state.dialogFreeText = !!freeText;
         return state;
       });
     },
@@ -727,7 +731,9 @@ function createStore() {
           && !state.dialogNpcName
           && !state.dialogNpcText
           && !(state.dialogOptions || []).length
-          && !state.dialogConversationID) {
+          && !state.dialogConversationID
+          && !state.dialogRelation
+          && !state.dialogFreeText) {
           return state;
         }
         state.dialogActive = false;
@@ -735,6 +741,8 @@ function createStore() {
         state.dialogNpcText = "";
         state.dialogOptions = [];
         state.dialogConversationID = "";
+        state.dialogRelation = null;
+        state.dialogFreeText = false;
         return state;
       });
     },
@@ -1495,6 +1503,7 @@ function createStore() {
           maxMembers: Number(next.maxMembers) > 0 ? Number(next.maxMembers) : 5,
           members,
           following: !!next.following,
+          lootRule: String(next.lootRule || next.LootRule || ''),
         };
         if (wasIn && !nowIn) {
           state.partyChat = [];

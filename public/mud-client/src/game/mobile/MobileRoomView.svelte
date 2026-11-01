@@ -322,6 +322,8 @@
         options={$store.dialogOptions}
         npcType={dialogNpcType}
         npc={dialogNpc}
+        relation={$store.dialogRelation}
+        freeText={$store.dialogFreeText}
         sendMessage={sendMessage}
       />
     {/if}

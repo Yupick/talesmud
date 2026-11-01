@@ -84,6 +84,17 @@
     min-height: 0;
     overflow: auto;
   }
+
+  /* Phones: go edge-to-edge so nothing is clipped at the sides. */
+  @media (max-width: 768px) {
+    .inv-overlay {
+      padding: 0.25em;
+    }
+    .inv-panel {
+      max-width: none;
+      border-radius: 8px;
+    }
+  }
 </style>
 
 {#if $store.inventoryOverlayOpen}

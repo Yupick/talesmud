@@ -35,9 +35,9 @@ export function getChildWidgetProps(widgetType, deps) {
     case 'room':
       return { store, sendMessage };
     case 'terminal':
-      return { onTerminalReady, onInput: onTerminalInput };
+      return { store, onTerminalReady, onInput: onTerminalInput };
     case 'terminalx':
-      return { onTerminalReady, onInput: onTerminalInput };
+      return { store, onTerminalReady, onInput: onTerminalInput };
     case 'actionbar':
       return { store, sendMessage, term: null };
     case 'hotbar':

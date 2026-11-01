@@ -12,10 +12,30 @@
   let equippedItems = {};
   let character = null;
   let gold = 0;
+  let maxWeight = 100; // default; overridden from character stats if available
   let hasMerchant = false;
   let detailItem = null;
   let collapsedCategories = {};
   let viewMode = localStorage.getItem('inventoryViewMode') || 'grid';
+
+  // Weight / encumbrance system
+  let totalCarriedWeight = 0;
+  let weightUpdateListeners = [];
+
+  function registerWeightUpdate(cb) {
+    weightUpdateListeners.push(cb);
+  }
+  function triggerWeightUpdate() {
+    totalCarriedWeight = computeCarriedWeight();
+    for (const cb of weightUpdateListeners) {
+      try { cb({ totalCarriedWeight, maxWeight }); } catch (e) { /* ignore */ }
+    }
+  }
+
+  function computeCarriedWeight() {
+    if (!inventory) return 0;
+    return inventory.reduce((sum, it) => sum + (it.weight || 0), 0);
+  }
 
   // Sell quantity popup state
   let showSellPopup = false;
@@ -50,6 +70,8 @@
     character = $store.character || null;
     gold = $store.gold || 0;
     hasMerchant = $store.hasMerchant || false;
+    totalCarriedWeight = computeCarriedWeight();
+    triggerWeightUpdate();
   }
 
   // Group items by category, only include non-empty categories
@@ -314,6 +336,23 @@
     gap: 0.25em;
     font-size: var(--text-sm);
     color: var(--color-gold);
+  }
+
+  .weight-display {
+    margin-left: 0.5em;
+    font-size: var(--text-sm);
+    color: var(--text-primary);
+    min-width: 60px;
+    text-align: right;
+  }
+
+  .weight-display.overweight {
+    color: #ef4444;
+    font-weight: 600;
+  }
+
+  .weight-display.warning {
+    color: #f59e0b;
   }
 
   .gold-display i {
@@ -1095,6 +1134,10 @@
     <span class="gold-display">
       <i class="material-icons">paid</i>
       {gold}
+    </span>
+    <span class="weight-display {totalCarriedWeight > maxWeight ? 'overweight' : ''}">
+      {totalCarriedWeight}/{maxWeight}
+      {maxWeight > 0 ? ' (' + Math.round((totalCarriedWeight / maxWeight) * 100) + '%)' : ''}
     </span>
     <span class="item-count">{inventory.length} items</span>
     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->

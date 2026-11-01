@@ -1,12 +1,12 @@
 <script>
+  import ChatPanel from './ChatPanel.svelte';
+
   export let store;
   export let sendMessage;
 
   let showPlayersOverlay = false;
-  let chatEl;
 
   $: playerCount = ($store.players || []).length;
-  $: roomChat = $store.roomChat || [];
   $: roomName = $store.roomName;
 
   // Close when the room itself changes, not on every store tick.
@@ -14,10 +14,6 @@
   $: if (roomName !== lastRoomName) {
     lastRoomName = roomName;
     showPlayersOverlay = false;
-  }
-
-  $: if (showPlayersOverlay && chatEl && roomChat.length) {
-    chatEl.scrollTop = chatEl.scrollHeight;
   }
 
   function togglePlayersOverlay() {
@@ -291,61 +287,6 @@
     opacity: 0.9;
   }
 
-  .room-chat {
-    flex: 1;
-    min-height: 0;
-    overflow-y: auto;
-    padding: 0.15em 0.35em 0.35em;
-  }
-
-  .chat-empty {
-    font-size: 12.5px;
-    color: var(--text-dim, #6d5f48);
-    padding: 0.45em 0.25em;
-    font-style: italic;
-  }
-
-  .chat-line {
-    display: flex;
-    flex-direction: column;
-    gap: 0.08em;
-    padding: 0.32em 0.2em 0.38em;
-    border-bottom: 1px solid transparent;
-    background-image: linear-gradient(
-      90deg,
-      transparent 0%,
-      rgba(180, 130, 60, 0.12) 20%,
-      rgba(180, 130, 60, 0.12) 80%,
-      transparent 100%
-    );
-    background-size: 100% 1px;
-    background-repeat: no-repeat;
-    background-position: bottom;
-  }
-
-  .chat-line:last-child {
-    background-image: none;
-  }
-
-  .chat-who {
-    font-family: var(--font-display, 'Cinzel', serif);
-    font-size: 11.5px;
-    font-weight: 600;
-    letter-spacing: 0.06em;
-    color: var(--accent-primary, #d4a44a);
-  }
-
-  .chat-who.you {
-    color: var(--color-gold, #fbbf24);
-  }
-
-  .chat-text {
-    font-size: 13.5px;
-    color: var(--text-primary, #e8dcc8);
-    line-height: 1.4;
-    word-break: break-word;
-  }
-
   @keyframes fadeIn {
     from { opacity: 0; transform: translateY(-4px); }
     to { opacity: 1; transform: translateY(0); }
@@ -367,26 +308,30 @@
   }
 </style>
 
-{#if playerCount > 0}
-  <button
-    class="player-badge"
-    class:active={showPlayersOverlay}
-    on:click={togglePlayersOverlay}
-    title="Players in room"
-  >
+<button
+  class="player-badge"
+  class:active={showPlayersOverlay}
+  on:click={togglePlayersOverlay}
+  title={playerCount > 0 ? `Players in room (${playerCount})` : 'Chat'}
+>
+  {#if playerCount > 0}
     <span class="badge-count">{playerCount}</span>
     <span class="badge-icon">&#x1F465;</span>
-  </button>
+  {:else}
+    <span class="badge-icon">&#x1F4AC;</span>
+  {/if}
+</button>
 
-  {#if showPlayersOverlay}
-    <div class="players-overlay expanded">
-      <div class="players-overlay-title">
-        In this room
-        <button class="player-action-btn friends-link whisper" type="button" on:click={openParty} title="Open party">Party</button>
-        {#if !isGuestClient()}
-          <button class="player-action-btn friends-link whisper" type="button" on:click={openFriends} title="Open friends">Friends</button>
-        {/if}
-      </div>
+{#if showPlayersOverlay}
+  <div class="players-overlay expanded">
+    <div class="players-overlay-title">
+      In this room
+      <button class="player-action-btn friends-link whisper" type="button" on:click={openParty} title="Open party">Party</button>
+      {#if !isGuestClient()}
+        <button class="player-action-btn friends-link whisper" type="button" on:click={openFriends} title="Open friends">Friends</button>
+      {/if}
+    </div>
+    {#if playerCount > 0}
       <div class="roster">
         {#each $store.players as player (player.id)}
           <div class="player-row">
@@ -426,20 +371,7 @@
         {/each}
       </div>
       <div class="chat-divider"></div>
-      <div class="room-chat" bind:this={chatEl}>
-        {#if roomChat.length === 0}
-          <div class="chat-empty">No room chat yet. Say something.</div>
-        {:else}
-          {#each roomChat as line (line.id)}
-            <div class="chat-line">
-              <span class="chat-who" class:you={line.isYou}>
-                {line.isYou ? `${line.name} (YOU)` : (line.name || 'Someone')}
-              </span>
-              <span class="chat-text">{line.text}</span>
-            </div>
-          {/each}
-        {/if}
-      </div>
-    </div>
-  {/if}
+    {/if}
+    <ChatPanel />
+  </div>
 {/if}

@@ -59,7 +59,7 @@
     </div>
 
     <div class="tab-panel" class:hidden={$activeTab !== 'console'}>
-      <MobileConsoleView {onTerminalReady} onInput={onTerminalInput} />
+      <MobileConsoleView {store} {onTerminalReady} onInput={onTerminalInput} />
     </div>
   </div>
 

@@ -1,7 +1,14 @@
 <script>
   import { onDestroy, tick } from 'svelte';
   import { playerSilhouette } from '../portraitSrc.js';
-  import { parsePartyChatLine } from '../partyState.js';
+  import {
+    LOOT_RULES,
+    classifyReadyCheck,
+    isPartyLeader,
+    lootRuleLabel,
+    normalizeLootRule,
+    parsePartyChatLine,
+  } from '../partyState.js';
 
   export let store = null;
   export let sendMessage = null;
@@ -35,7 +42,10 @@
   $: onlineCount = members.filter((m) => m.online).length;
   $: maxMembers = party.maxMembers || 5;
   $: memberCount = members.length;
-  $: iAmLeader = !!(myId && (party.leaderId === myId || members.some((m) => m.id === myId && m.isLeader)));
+  $: iAmLeader = isPartyLeader(party, me);
+  $: lootRule = normalizeLootRule(party.lootRule);
+  $: lootRuleText = lootRuleLabel(lootRule);
+  $: readyCheck = classifyReadyCheck(partyChat);
   $: title = party.inParty && party.partyName ? party.partyName : 'Party';
   $: subtitle = party.inParty
     ? `${memberCount}/${maxMembers} members · ${onlineCount} online`
@@ -147,6 +157,22 @@
   function toggleFollow() {
     if (!sendMessage || iAmLeader) return;
     sendMessage(party.following ? 'party unfollow' : 'party follow');
+  }
+
+  function setLootRule(rule) {
+    const id = normalizeLootRule(rule);
+    if (!sendMessage || !iAmLeader || id === lootRule) return;
+    sendMessage(`party loot ${id}`);
+  }
+
+  function startReadyCheck() {
+    if (!sendMessage || !iAmLeader) return;
+    sendMessage('party readycheck');
+  }
+
+  function markReady(ready) {
+    if (!sendMessage) return;
+    sendMessage(ready ? 'party ready' : 'party notready');
   }
 
   function leaveParty() {
@@ -444,6 +470,75 @@
     border-color: rgba(248, 113, 113, 0.4);
     color: #fca5a5;
   }
+  .party-tools {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+    padding: 6px 0 2px;
+    border-bottom: 1px solid rgba(148,163,184,0.12);
+  }
+  .loot-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .loot-label {
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: #9ca3af;
+    flex-shrink: 0;
+  }
+  .loot-opts {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 4px;
+    min-width: 0;
+  }
+  .loot-opt {
+    border: 1px solid rgba(148, 163, 184, 0.3);
+    background: rgba(255,255,255,0.04);
+    color: #cbd5e1;
+    border-radius: 999px;
+    min-height: 28px;
+    padding: 0 10px;
+    cursor: pointer;
+    font-size: 10px;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    text-transform: uppercase;
+  }
+  .loot-opt.active {
+    background: rgba(251, 191, 36, 0.18);
+    border-color: rgba(251, 191, 36, 0.6);
+    color: #fbbf24;
+  }
+  .loot-readonly {
+    font-size: 11px;
+    color: #9ca3af;
+    letter-spacing: 0.02em;
+  }
+  .ready-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 6px;
+  }
+  .ready-row .act {
+    min-height: 34px;
+    padding: 0 10px;
+  }
+  .ready-status {
+    font-size: 11px;
+    color: #86efac;
+    letter-spacing: 0.02em;
+  }
+  .ready-hint {
+    font-size: 10px;
+    color: #8a8070;
+    font-style: italic;
+  }
   .invite-overlay {
     position: fixed;
     inset: 0;
@@ -633,6 +728,44 @@
               {/each}
             </div>
           {/if}
+          <div class="party-tools">
+            {#if iAmLeader}
+              <div class="loot-row" role="radiogroup" aria-label="Loot rule">
+                <span class="loot-label">Loot</span>
+                <div class="loot-opts">
+                  {#each LOOT_RULES as rule (rule.id)}
+                    <button
+                      class="loot-opt"
+                      class:active={lootRule === rule.id}
+                      type="button"
+                      role="radio"
+                      aria-checked={lootRule === rule.id}
+                      title={`Set loot rule: ${rule.label}`}
+                      on:click={() => setLootRule(rule.id)}
+                    >{rule.label}</button>
+                  {/each}
+                </div>
+              </div>
+            {:else}
+              <div class="loot-readonly">Loot: {lootRuleText}</div>
+            {/if}
+            <div class="ready-row">
+              {#if iAmLeader}
+                <button class="act secondary readycheck" type="button" on:click={startReadyCheck}>
+                  Ready Check
+                </button>
+              {/if}
+              {#if readyCheck === 'active'}
+                <button class="act accept" type="button" on:click={() => markReady(true)}>Ready</button>
+                <button class="act decline" type="button" on:click={() => markReady(false)}>Not Ready</button>
+              {:else if readyCheck === 'done'}
+                <span class="ready-status">Ready check complete</span>
+              {/if}
+            </div>
+            {#if readyCheck === 'active'}
+              <div class="ready-hint">Respond with “party ready” or “party notready”.</div>
+            {/if}
+          </div>
           {#if party.inParty && !iAmLeader}
             <button class="act secondary follow" type="button" on:click={toggleFollow}>
               {party.following ? 'Unfollow' : 'Follow'}

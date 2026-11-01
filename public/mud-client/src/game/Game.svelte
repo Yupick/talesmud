@@ -56,7 +56,25 @@
     max-width: 100vw;
     height: 100dvh;
     max-height: 100dvh;
-    overflow: auto;
+    /* Vertical scroll allowed; never let a wide panel cause sideways scroll. */
+    overflow-x: hidden;
+    overflow-y: auto;
+  }
+
+  /* Narrow shells: reclaim horizontal space so panels are not clipped. */
+  @media (max-width: 768px) {
+    .gameContainer {
+      padding: 44px 6px 6px;
+    }
+    .gameContainer.mobile {
+      padding: 0;
+    }
+  }
+
+  @media (max-width: 420px) {
+    .gameContainer {
+      padding: 40px 4px 4px;
+    }
   }
 
   .gameContainer.mobile :global(.switcher) {
@@ -133,10 +151,17 @@
   import { getMyCharacters } from "../api/characters.js";
   import { isGuestSession, PICKER_SEEN_KEY, shouldAutoOpenCharacterPicker } from "../authSession.js";
   import InventoryOverlay from "./ui/InventoryOverlay.svelte";
+  import SpellbookOverlay from "./ui/SpellbookOverlay.svelte";
   import BattleStage from "./ui/BattleStage.svelte";
   import MapOverviewOverlay from "./ui/MapOverviewOverlay.svelte";
   import FriendsOverlay from "./ui/FriendsOverlay.svelte";
   import PartyOverlay from "./ui/PartyOverlay.svelte";
+  import ClanPanel from "./ui/ClanPanel.svelte";
+  import DMsPanel from "./ui/DMsPanel.svelte";
+  import ClassesEditor from "./ui/ClassesEditor.svelte";
+  import NpcFactory from "./ui/NpcFactory.svelte";
+  import DungeonBuilder from "./ui/DungeonBuilder.svelte";
+  import AuditPanel from "./ui/AuditPanel.svelte";
 
   import { onMount, onDestroy } from "svelte";
   import { get } from "svelte/store";
@@ -148,8 +173,15 @@
     accountMenuOpen,
     battleDockOpen,
     cheatSheetOpen,
+    clanPanelOpen,
+    classesEditorOpen,
+    auditOpen,
+    dungeonBuilderOpen,
+    npcFactoryOpen,
+    dmsPanelOpen,
     layoutDialogOpen,
     pickupPanelOpen,
+    spellbookOpen,
     requestCloseLayoutDialog,
   } from "./uiChrome.js";
   import PickupPanel from "./ui/PickupPanel.svelte";
@@ -158,6 +190,7 @@
   import { getAuth } from "../auth.js";
   import { showCharacterWizard } from "../onboarding/onboardingStore.js";
   import { createClient } from "./Client";
+  import { chatStore } from "./chatStore.js";
   import { backend, wsbackend } from "../api/base.js";
   import {
     WS_CLOSE_SESSION_REPLACED,
@@ -181,8 +214,10 @@
   let reconnectAttempt = 0;
   let destroyed = false;
 
-  // Multi-renderer dispatches output to all registered terminal widgets
+  // Multi-renderer dispatches output to all registered terminal widgets and
+  // feeds the tabbed chat log (Say/Tell/Party/System) in one place.
   function multiRenderer(data) {
+    chatStore.ingest(data);
     for (const r of renderers) {
       r(data);
     }
@@ -198,6 +233,9 @@
   const { isMobile } = mobileStore;
 
   $: editMode = $layoutStore.editMode;
+
+  // Keep chat `isYou` / reply targets in sync with the selected character.
+  $: chatStore.setSelf($muxStore.character);
 
   // Gate on the asset id — any muxStore notify used to re-run this and
   // rewrite document.body.style (visible full-screen flicker ~every ambient tick).
@@ -382,7 +420,14 @@
       map: !!play.mapOverviewOpen,
       friends: !!play.friendsOverlayOpen,
       party: !!play.partyOverlayOpen,
+      clan: get(clanPanelOpen),
+      dms: get(dmsPanelOpen),
+      classesEditor: get(classesEditorOpen),
+      audit: get(auditOpen),
+      dungeonBuilder: get(dungeonBuilderOpen),
+      npcFactory: get(npcFactoryOpen),
       inventory: !!play.inventoryOverlayOpen,
+      spellbook: get(spellbookOpen),
       battleOutcome: play.combatPhase === "ending",
       battleDock: get(battleDockOpen),
       accountMenu: get(accountMenuOpen),
@@ -402,7 +447,15 @@
     else if (id === "map") muxStore.closeMapOverview();
     else if (id === "friends") muxStore.closeFriendsOverlay();
     else if (id === "party") muxStore.closePartyOverlay();
+    else if (id === "clan") clanPanelOpen.set(false);
+    else if (id === "dms") dmsPanelOpen.set(false);
+    else if (id === "classesEditor") classesEditorOpen.set(false);
+    else if (id === "audit") auditOpen.set(false);
+    else if (id === "dungeonBuilder") dungeonBuilderOpen.set(false);
+    else if (id === "npcFactory") npcFactoryOpen.set(false);
     else if (id === "inventory") muxStore.closeInventoryOverlay();
+    else if (id === "inventoryQuick") muxStore.closeInventoryOverlay();
+    else if (id === "spellbook") spellbookOpen.set(false);
     else if (id === "battleOutcome") muxStore.dismissCombat();
     else if (id === "battleDock") battleDockOpen.set(false);
     else if (id === "accountMenu") accountMenuOpen.set(false);
@@ -470,6 +523,63 @@
       if (!top) return;
       event.preventDefault();
       closeTopPanel(top);
+      return;
+    }
+    // Social panels: C = clan, M = direct messages. Only toggle when nothing
+    // else is on top (or it is already the top panel).
+    if (event.key === "c" || event.key === "C") {
+      if (top && top !== "clan") return;
+      event.preventDefault();
+      clanPanelOpen.update((open) => !open);
+      return;
+    }
+    if (event.key === "m" || event.key === "M") {
+      if (top && top !== "dms") return;
+      event.preventDefault();
+      dmsPanelOpen.update((open) => !open);
+      return;
+    }
+    // K opens the spellbook / action-bar loadout.
+    if (event.key === "k" || event.key === "K") {
+      if (top && top !== "spellbook") return;
+      event.preventDefault();
+      spellbookOpen.update((open) => !open);
+      return;
+    }
+    // L opens the class / skill balance editor.
+    if (event.key === "l" || event.key === "L") {
+      if (top && top !== "classesEditor") return;
+      event.preventDefault();
+      classesEditorOpen.update((open) => !open);
+      return;
+    }
+    // I toggles the quick inventory overlay. The overlay flag surfaces as the
+    // "inventory" panel in shortcutFlags(), so only toggle when it is on top.
+    if (event.key === "i" || event.key === "I") {
+      if (top && top !== "inventory") return;
+      event.preventDefault();
+      muxStore.setInventoryOverlayOpen(!get(muxStore).inventoryOverlayOpen);
+      return;
+    }
+    // A opens the audit log viewer.
+    if (event.key === "a" || event.key === "A") {
+      if (top && top !== "audit") return;
+      event.preventDefault();
+      auditOpen.update((open) => !open);
+      return;
+    }
+    // D opens the dungeon builder.
+    if (event.key === "d" || event.key === "D") {
+      if (top && top !== "dungeonBuilder") return;
+      event.preventDefault();
+      dungeonBuilderOpen.update((open) => !open);
+      return;
+    }
+    // N opens the mob / NPC factory.
+    if (event.key === "n" || event.key === "N") {
+      if (top && top !== "npcFactory") return;
+      event.preventDefault();
+      npcFactoryOpen.update((open) => !open);
       return;
     }
     // The pickup panel handles 1–9 and Enter. Do not also fire the hotbar.
@@ -590,8 +700,15 @@
 
   <!-- Inventory popup overlay (default inv open mode) -->
   <InventoryOverlay store={muxStore} {sendMessage} />
+  <SpellbookOverlay store={muxStore} {sendMessage} />
   <FriendsOverlay store={muxStore} {sendMessage} />
   <PartyOverlay store={muxStore} {sendMessage} />
+  <ClanPanel store={muxStore} authToken={$authToken} />
+  <DMsPanel store={muxStore} authToken={$authToken} />
+  <ClassesEditor />
+  <NpcFactory authToken={$authToken} />
+  <DungeonBuilder authToken={$authToken} />
+  <AuditPanel authToken={$authToken} />
   <PickupPanel
     open={$pickupPanelOpen}
     items={$muxStore.groundItems || []}

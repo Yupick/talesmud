@@ -5,11 +5,22 @@
   import { FitAddon } from 'xterm-addon-fit';
   import LocalEchoController from '../echo/LocalEchoController';
   import { wrapAnsi } from '../echo/wrapAnsi.js';
+  import { chatCommandRequest } from '../chatStore.js';
+  import { GAME_COMMANDS } from '../commandHistory.js';
   import '../../../node_modules/xterm/css/xterm.css';
   import { hexToRgb } from '../playerColors.js';
 
   export let onTerminalReady = () => {};
   export let onInput = () => {};
+
+  // Optional game store — used only to autocomplete names of players in the
+  // room. Falls back to an empty store so the widget still works standalone.
+  const EMPTY_STORE = writable({});
+  export let store = EMPTY_STORE;
+
+  $: roomPlayerNames = ($store && $store.players ? $store.players : [])
+    .map((p) => p && p.name)
+    .filter(Boolean);
 
   const dispatch = createEventDispatcher();
 
@@ -18,6 +29,7 @@
   let fitAddon;
   let localEcho;
   let resizeObserver;
+  let unsubscribeCommand = null;
   const rawLines = [];
   let paintedCols = 0;
 
@@ -148,9 +160,12 @@
       .catch((error) => console.log(`Error reading: ${error}`));
   }
 
-  function autocompleteCommonCommands(index, tokens) {
-    if (index === 0) return ['north', 'east', 'south', 'west', 'say'];
-    return [];
+  // Tab completion (Fase 3.2): the first token completes command names, later
+  // tokens complete names of players in the current room. The local-echo
+  // controller performs the case-insensitive prefix filtering.
+  function autocompleteCommonCommands(index) {
+    if (index === 0) return GAME_COMMANDS;
+    return roomPlayerNames;
   }
 
   onMount(() => {
@@ -199,6 +214,15 @@
 
     readLine();
 
+    // Click-to-respond from the chat panel: prefill the command and focus.
+    unsubscribeCommand = chatCommandRequest.subscribe(({ command, seq }) => {
+      if (!seq || !command) return;
+      if (localEcho && localEcho._active) {
+        localEcho.setInput(command, true);
+      }
+      if (term) term.focus();
+    });
+
     // Handle resize with debounce
     const handleResize = debounce(() => {
       applyFontSize();
@@ -225,6 +249,7 @@
   });
 
   onDestroy(() => {
+    if (unsubscribeCommand) unsubscribeCommand();
     if (resizeObserver) {
       resizeObserver.disconnect();
     }

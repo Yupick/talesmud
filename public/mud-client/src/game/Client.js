@@ -7,6 +7,11 @@ import { examineResultToCard } from "./ui/parseExamineOverlay.js";
 import { getPlayerColor } from "./playerColors.js";
 import { markPlayersYou, parseRoomChatLine } from "./roomChat.js";
 import { parsePartyChatLine } from "./partyState.js";
+import {
+  appendRelationFeedback,
+  extractRelationFeedback,
+  formatRelationFeedback,
+} from "./relationFeedback.js";
 
 const GAME_CLIENT = writable(null);
 
@@ -194,6 +199,15 @@ function createClient(renderer, characterCreator, muxStore) {
     // Show NPC name and text
     output += `[${msg.npcName}] ${msg.npcText}\n`;
 
+    // Optional, subtle relationship feedback (Batch 27.4). Only rendered when
+    // the server actually attached relation info to this dialog message.
+    const relation = extractRelationFeedback(msg, msg.npcName);
+    const relationLine = formatRelationFeedback(relation, msg.npcName);
+    const relationText = relation && relation.text ? relation.text.trim() : "";
+    if (relationLine && (!relationText || !String(msg.npcText || "").includes(relationText))) {
+      output += `${relationLine}\n`;
+    }
+
     // Show options if any
     if (msg.options && msg.options.length > 0) {
       output += "\n";
@@ -208,7 +222,14 @@ function createClient(renderer, characterCreator, muxStore) {
     // Update store for UI overlay
     if (mux) {
       if (mux.clearShop) mux.clearShop();
-      mux.setDialog(msg.npcName, msg.npcText, msg.options || [], msg.conversationID || "");
+      mux.setDialog(
+        msg.npcName,
+        msg.npcText,
+        msg.options || [],
+        msg.conversationID || "",
+        relation,
+        msg.freeText
+      );
     }
   };
 
@@ -228,6 +249,7 @@ function createClient(renderer, characterCreator, muxStore) {
         maxMembers: msg.maxMembers || 5,
         members: msg.members || [],
         following: !!msg.following,
+        lootRule: msg.lootRule || '',
       });
     }
   };
@@ -279,7 +301,7 @@ function createClient(renderer, characterCreator, muxStore) {
     if (msg.username) {
       output += `[${msg.username}] `;
     }
-    output += msg.message;
+    output += appendRelationFeedback(msg.message, msg, msg.username);
     output += "\n[The conversation has ended]";
     renderer(output);
     overlayStore.pushMessage(output);
@@ -631,7 +653,8 @@ function createClient(renderer, characterCreator, muxStore) {
       if (messageHandlers[msg.type]) {
         messageHandlers[msg.type](msg);
       } else {
-        let message = msg.message;
+        // Optional relationship feedback may ride any plain message too.
+        let message = appendRelationFeedback(msg.message, msg, msg.username);
 
         if (message === "" || message === "\n") {
           console.log("RECEIVED EMPTY MESSAGE")
@@ -639,15 +662,18 @@ function createClient(renderer, characterCreator, muxStore) {
         }
 
         if (msg.username) {
-          // Pass structured data so terminals can color the player name
+          // Pass structured data so terminals can color the player name.
+          // `channel` (B7) lets chatStore route global channels to the Ch tab.
           const color = getPlayerColor(msg.username);
-          renderer({ username: msg.username, message: msg.message, color });
+          const payload = { username: msg.username, message, color };
+          if (msg.channel) payload.channel = msg.channel;
+          renderer(payload);
           // Room mood / system ambiance: body only on overlay (no SYSTEM: prefix).
           // Terminal still gets the username via renderer above.
           if (/^system$/i.test(String(msg.username))) {
-            overlayStore.pushMessage({ text: msg.message, kind: 'ambiance' });
+            overlayStore.pushMessage({ text: message, kind: 'ambiance' });
           } else {
-            overlayStore.pushMessage(msg.username + ":  " + msg.message);
+            overlayStore.pushMessage(msg.username + ":  " + message);
           }
         } else {
           renderer(message);

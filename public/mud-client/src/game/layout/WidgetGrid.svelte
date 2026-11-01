@@ -134,6 +134,7 @@
     width: 100%;
     height: 100%;
     position: relative;
+    overflow-x: hidden;
   }
 
   .widget-grid-container :global(.svlt-grid-container) {
@@ -178,6 +179,7 @@
   .grid-item-content {
     width: 100%;
     height: 100%;
+    min-width: 0;
     overflow: hidden;
     position: relative;
   }

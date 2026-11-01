@@ -1,8 +1,22 @@
 <script>
   import { onMount, onDestroy, createEventDispatcher, tick } from 'svelte';
+  import { chatCommandRequest } from '../chatStore.js';
+  import {
+    GAME_COMMANDS,
+    createHistoryState,
+    historyNext,
+    historyPrev,
+    loadHistory,
+    pushHistory,
+    resetHistoryCursor,
+    saveHistory,
+    tabComplete,
+  } from '../commandHistory.js';
 
   export let onTerminalReady = () => {};
   export let onInput = () => {};
+  // Optional game store — used only to autocomplete names of players in the room.
+  export let store = null;
 
   const dispatch = createEventDispatcher();
 
@@ -10,9 +24,11 @@
   let inputEl;
   let lines = [];
   let inputText = '';
-  let history = [];
-  let historyIndex = -1;
-  let tempInput = '';
+  // Browsing state (list + cursor + preserved draft) lives in the pure module.
+  let historyState = createHistoryState([]);
+  let completeCycle = null;
+  let completeCursor = 0;
+  let unsubscribeCommand = null;
 
   const MAX_LINES = 1000;
   let lineCounter = 0;
@@ -47,6 +63,28 @@
 
   $: currentFontSize = FONT_SIZES[fontSizeIndex].size;
   $: currentFontLabel = FONT_SIZES[fontSizeIndex].label;
+
+  // ── Command autocomplete sources ──
+  // Known commands are the static game list; player names come from the room
+  // store when one was passed in. Both feed Tab completion (Fase 3.2).
+  $: roomPlayerNames = store && $store
+    ? ($store.players || []).map((p) => p && p.name).filter(Boolean)
+    : [];
+  $: completionCommands = GAME_COMMANDS;
+
+  function autocompleteOptions() {
+    return { commands: completionCommands, players: roomPlayerNames };
+  }
+
+  function caretToEnd() {
+    tick().then(() => {
+      if (!inputEl) return;
+      try {
+        const end = inputEl.value.length;
+        inputEl.setSelectionRange(end, end);
+      } catch (e) { /* ignore */ }
+    });
+  }
 
   // ── Line classification: detect content type and assign color class ──
 
@@ -127,38 +165,63 @@
   function handleKeydown(e) {
     if (e.key === 'Enter') {
       e.preventDefault();
+      completeCycle = null;
+      completeCursor = 0;
       const cmd = inputText;
       if (cmd.trim()) {
         addLine('> ' + cmd, 'tx-cmd');
-        history = [...history, cmd];
-        historyIndex = -1;
-        tempInput = '';
+        const nextList = pushHistory(historyState.list, cmd);
+        historyState = createHistoryState(nextList);
+        saveHistory(historyState.list);
         onInput(cmd);
         scrollToBottom();
       }
       inputText = '';
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      if (history.length > 0) {
-        if (historyIndex === -1) {
-          tempInput = inputText;
-          historyIndex = history.length - 1;
-        } else if (historyIndex > 0) {
-          historyIndex--;
-        }
-        inputText = history[historyIndex];
-      }
+      completeCycle = null;
+      completeCursor = 0;
+      const next = historyPrev(historyState, inputText);
+      historyState = { list: next.list, cursor: next.cursor, draft: next.draft };
+      inputText = next.text;
+      caretToEnd();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
-      if (historyIndex !== -1) {
-        if (historyIndex < history.length - 1) {
-          historyIndex++;
-          inputText = history[historyIndex];
-        } else {
-          historyIndex = -1;
-          inputText = tempInput;
-        }
-      }
+      completeCycle = null;
+      completeCursor = 0;
+      const next = historyNext(historyState, inputText);
+      historyState = { list: next.list, cursor: next.cursor, draft: next.draft };
+      inputText = next.text;
+      caretToEnd();
+    } else if (e.key === 'Tab') {
+      // Only take over Tab when there is something to complete; otherwise the
+      // event bubbles (e.g. combat target cycling in Game.svelte).
+      if (!inputText) return;
+      const result = tabComplete(inputText, {
+        ...autocompleteOptions(),
+        cycle: completeCycle,
+        cursor: completeCursor,
+      });
+      if (!result.matched) return;
+      e.preventDefault();
+      e.stopPropagation();
+      completeCycle = result.cycle;
+      completeCursor = result.cursor;
+      inputText = result.input;
+      caretToEnd();
+    } else if (e.key === 'Escape') {
+      completeCycle = null;
+      completeCursor = 0;
+    }
+  }
+
+  // A manual edit ends any Tab cycle; if we were browsing history, treat the
+  // edit as a fresh draft so the next ArrowUp starts from the newest entry.
+  function handleInput() {
+    completeCycle = null;
+    completeCursor = 0;
+    if (historyState.cursor !== historyState.list.length) {
+      historyState = resetHistoryCursor(historyState);
     }
   }
 
@@ -168,6 +231,7 @@
 
   onMount(() => {
     loadFontSize();
+    historyState = createHistoryState(loadHistory());
 
     // Load Fira Code font if not already present
     if (!document.querySelector('link[href*="Fira+Code"]')) {
@@ -209,8 +273,28 @@
     onTerminalReady(null, renderer);
     dispatch('ready', { renderer });
 
+    // Click-to-respond from the chat panel: prefill the command and focus.
+    unsubscribeCommand = chatCommandRequest.subscribe(({ command, seq }) => {
+      if (!seq || !command) return;
+      completeCycle = null;
+      completeCursor = 0;
+      inputText = command;
+      tick().then(() => {
+        if (!inputEl) return;
+        inputEl.focus();
+        try {
+          const end = inputEl.value.length;
+          inputEl.setSelectionRange(end, end);
+        } catch (e) { /* ignore */ }
+      });
+    });
+
     // Auto-focus the input
     if (inputEl) inputEl.focus();
+  });
+
+  onDestroy(() => {
+    if (unsubscribeCommand) unsubscribeCommand();
   });
 </script>
 
@@ -456,6 +540,7 @@
       bind:this={inputEl}
       bind:value={inputText}
       on:keydown={handleKeydown}
+      on:input={handleInput}
       placeholder="_"
       spellcheck="false"
       autocomplete="off"

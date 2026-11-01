@@ -1,14 +1,23 @@
 <script>
   import { portraitBustSrc, onPortraitBustError } from '../portraitSrc.js';
+  import { relationSummary } from '../relationFeedback.js';
 
   export let npcName = "";
   export let npcText = "";
   export let options = [];
   export let npcType = "npc";
   export let npc = null;
+  export let relation = null;
+  export let freeText = false;
   export let sendMessage;
 
+  let freeTextDraft = "";
+
   const TRADE_TOKEN = "__trade__";
+
+  $: relationLabel = relationSummary(relation, npcName);
+  $: relationTone = relation && relation.direction ? relation.direction : "neutral";
+  $: relationMark = relationTone === "up" ? "▲" : relationTone === "down" ? "▼" : "•";
 
   $: displayOptions = (() => {
     const opts = Array.isArray(options) ? options.slice() : [];
@@ -30,8 +39,17 @@
     sendMessage(String(option.index));
   }
 
+  function submitFreeText() {
+    const text = String(freeTextDraft || "").trim();
+    if (!text) return;
+    sendMessage(text);
+    freeTextDraft = "";
+  }
+
   function isQuestOption(option) {
-    return option?.text?.startsWith("[Quest]") || option?.text?.startsWith("[Turn In]");
+    return /^quest:/i.test(String(option?.kind || ""))
+      || option?.text?.startsWith("[Quest]")
+      || option?.text?.startsWith("[Turn In]");
   }
 
   function isTradeOption(option) {
@@ -134,6 +152,31 @@
     border-left-color: rgba(245, 158, 11, 0.65);
   }
 
+  /* Subtle relationship-change cue (Batch 27.4). */
+  .dialog-relation {
+    display: flex;
+    align-items: baseline;
+    gap: 0.4em;
+    margin-top: 0.55em;
+    padding-left: 0.15em;
+    font-size: 0.84em;
+    letter-spacing: 0.02em;
+    color: #9ca3af;
+  }
+
+  .dialog-relation.up {
+    color: #86efac;
+  }
+
+  .dialog-relation.down {
+    color: #fca5a5;
+  }
+
+  .relation-mark {
+    font-size: 0.9em;
+    line-height: 1;
+  }
+
   .dialog-options {
     display: flex;
     flex-direction: column;
@@ -215,6 +258,39 @@
     flex: 1;
   }
 
+  .dialog-free-text {
+    display: flex;
+    gap: 0.5em;
+    margin-top: 1em;
+  }
+
+  .dialog-free-text input {
+    flex: 1;
+    min-width: 0;
+    padding: 0.75em;
+    border: 1px solid rgba(255, 255, 255, 0.25);
+    border-radius: 8px;
+    background: rgba(255, 255, 255, 0.08);
+    color: #e5e7eb;
+    font: inherit;
+  }
+
+  .dialog-free-text button {
+    min-width: 5em;
+    padding: 0.7em 1em;
+    border: 1px solid rgba(59, 130, 246, 0.5);
+    border-radius: 8px;
+    background: rgba(59, 130, 246, 0.2);
+    color: #bfdbfe;
+    font: inherit;
+    cursor: pointer;
+  }
+
+  .dialog-free-text button:disabled {
+    opacity: 0.55;
+    cursor: default;
+  }
+
   @media screen and (max-width: 600px) {
     .dialog-overlay {
       padding: 1em;
@@ -255,6 +331,12 @@
       <div class="dialog-text" class:quest={npcType === 'quest'}>
         {npcText}
       </div>
+      {#if relationLabel}
+        <div class="dialog-relation {relationTone}" title={relationLabel}>
+          <span class="relation-mark" aria-hidden="true">{relationMark}</span>
+          <span>{relationLabel}</span>
+        </div>
+      {/if}
     </div>
   </div>
 
@@ -265,6 +347,7 @@
           class="dialog-option-btn"
           class:quest={isQuestOption(option)}
           class:trade={isTradeOption(option)}
+          data-kind={option.kind || undefined}
           on:click={() => handleOption(option)}
         >
           <span class="option-index">{isTradeOption(option) ? '★' : option.index}</span>
@@ -272,5 +355,18 @@
         </button>
       {/each}
     </div>
+  {/if}
+
+  {#if freeText}
+    <form class="dialog-free-text" on:submit|preventDefault={submitFreeText}>
+      <input
+        type="text"
+        bind:value={freeTextDraft}
+        placeholder="Escribe tu respuesta..."
+        aria-label="Escribe tu respuesta..."
+        autocomplete="off"
+      />
+      <button type="submit" disabled={!freeTextDraft.trim()}>Enviar</button>
+    </form>
   {/if}
 </div>

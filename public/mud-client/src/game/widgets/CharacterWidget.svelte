@@ -2,6 +2,13 @@
   import { settingsStore } from '../SettingsStore.js';
   import { overlayStore } from '../ui/overlayStore.js';
   import { onItemArtError } from '../itemArtSrc.js';
+  import { spellbookOpen } from '../uiChrome.js';
+  import {
+    characterEquipmentRows,
+    countEquippedSlots,
+    hotbarSkillRows,
+  } from '../characterSheet.js';
+  import { hotbarSlotForSkill } from '../spellbook.js';
   import {
     bindSkillToFirstEmptyHotbar,
     characterClassId,
@@ -21,6 +28,7 @@
   let sheetTab = 'stats';
 
   let character = null;
+  let equippedItems = {};
   let stats = {
     currentHitPoints: 0,
     maxHitPoints: 0,
@@ -35,6 +43,7 @@
   $: if (store) {
     character = $store.character;
     stats = $store.characterStats || stats;
+    equippedItems = $store.equippedItems || character?.equippedItems || character?.equipment || {};
   }
 
   // Derived values
@@ -86,6 +95,13 @@
   $: slotPlaceholders = Array.from({ length: Math.max(computedMaxSlots, 1) }, (_, i) => classified.equipped[i] || null);
   $: slotsFull = classified.equipped.length >= computedMaxSlots;
   $: hotbarBinds = normalizeHotbarBinds($settingsStore.interface?.hotbarBinds);
+  $: gearRows = characterEquipmentRows(equippedItems);
+  $: gearFilled = countEquippedSlots(gearRows);
+  $: hotbarSkills = hotbarSkillRows(hotbarBinds);
+
+  function openSpellbook() {
+    spellbookOpen.set(true);
+  }
 
   function formatGold(value) {
     if (value >= 1000000) return (value / 1000000).toFixed(1) + 'M';
@@ -781,6 +797,143 @@
     color: #fca5a5;
   }
 
+  /* Spellbook launcher shown under the tabs */
+  .sheet-actions {
+    display: flex;
+    gap: 0.35em;
+    margin: -0.1em 0 0.5em;
+  }
+
+  .sheet-action-btn {
+    flex: 1;
+    min-height: 32px;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.3em;
+    padding: 0.35em 0.5em;
+    border-radius: 6px;
+    border: 1px solid var(--panel-inner-border);
+    background: var(--panel-inner-bg);
+    color: var(--text-secondary);
+    font: inherit;
+    font-size: var(--text-xs);
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    cursor: pointer;
+  }
+
+  .sheet-action-btn:hover {
+    color: var(--text-primary);
+    background: var(--panel-inner-hover);
+  }
+
+  /* Gear tab */
+  .gear-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25em;
+    margin-bottom: 0.35em;
+  }
+
+  .gear-row {
+    display: flex;
+    align-items: center;
+    gap: 0.45em;
+    padding: 0.3em 0.45em;
+    background: var(--panel-inner-bg);
+    border: 1px solid var(--panel-inner-border);
+    border-radius: 6px;
+  }
+
+  .gear-row.empty {
+    opacity: 0.6;
+  }
+
+  .gear-glyph {
+    font-size: 1.15em;
+    opacity: 0.9;
+  }
+
+  .gear-copy {
+    display: flex;
+    flex-direction: column;
+    min-width: 0;
+    flex: 1;
+  }
+
+  .gear-name {
+    font-size: var(--text-sm);
+    font-weight: 600;
+    color: var(--text-primary);
+    line-height: 1.2;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .gear-row.empty .gear-name {
+    color: var(--text-dim);
+    font-weight: 400;
+    font-style: italic;
+  }
+
+  .gear-slot {
+    font-size: var(--text-xs);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-dim);
+  }
+
+  .gear-quality {
+    flex-shrink: 0;
+    font-size: 0.65rem;
+    font-weight: 700;
+    letter-spacing: 0.05em;
+    border: 1px solid currentColor;
+    border-radius: 999px;
+    padding: 0.05em 0.45em;
+  }
+
+  /* Hotbar strip */
+  .hotbar-chips {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.3em;
+    margin-bottom: 0.45em;
+  }
+
+  .hotbar-chip {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35em;
+    font-size: var(--text-xs);
+    color: var(--text-primary);
+    background: rgba(96, 165, 250, 0.12);
+    border: 1px solid rgba(96, 165, 250, 0.3);
+    border-radius: 6px;
+    padding: 0.15em 0.5em 0.15em 0.2em;
+  }
+
+  .hotbar-chip b {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 1.35em;
+    height: 1.35em;
+    border-radius: 4px;
+    background: rgba(96, 165, 250, 0.25);
+    color: #bfdbfe;
+    font-size: 0.9em;
+  }
+
+  .skill-chip.hotkey {
+    color: #bfdbfe;
+    background: rgba(96, 165, 250, 0.12);
+    border-color: rgba(96, 165, 250, 0.32);
+  }
+
   .skill-slots {
     display: grid;
     grid-template-columns: repeat(auto-fit, minmax(118px, 1fr));
@@ -1025,6 +1178,18 @@
       <button
         type="button"
         class="sheet-tab"
+        class:active={sheetTab === 'gear'}
+        role="tab"
+        aria-selected={sheetTab === 'gear'}
+        on:click={() => sheetTab = 'gear'}
+      >
+        <i class="material-icons">shield</i>
+        Gear
+        <span class="tab-count">{gearFilled}/{gearRows.length}</span>
+      </button>
+      <button
+        type="button"
+        class="sheet-tab"
         class:active={sheetTab === 'skills'}
         role="tab"
         aria-selected={sheetTab === 'skills'}
@@ -1033,6 +1198,18 @@
         <i class="material-icons">auto_awesome</i>
         Skills
         <span class="tab-count">{classified.equipped.length}/{computedMaxSlots}</span>
+      </button>
+    </div>
+
+    <div class="sheet-actions">
+      <button
+        type="button"
+        class="sheet-action-btn"
+        title="Open the spellbook and action-bar loadout (K)"
+        on:click={openSpellbook}
+      >
+        <i class="material-icons" style="font-size:1.1em">menu_book</i>
+        Spellbook (K)
       </button>
     </div>
 
@@ -1145,6 +1322,29 @@
         </div>
       {/if}
     </div>
+    {:else if sheetTab === 'gear'}
+    <!-- Gear tab -->
+    <div class="game-panel-divider">
+      <span>Equipment</span>
+      <span class="tab-count">{gearFilled}/{gearRows.length}</span>
+    </div>
+    {#if gearFilled === 0}
+      <div class="skills-note">Nothing equipped yet — use the Equipment widget to dress your character.</div>
+    {/if}
+    <div class="gear-list">
+      {#each gearRows as row (row.key)}
+        <div class="gear-row" class:empty={row.empty} title={row.empty ? row.label + ' — Empty' : row.name + (row.qualityLabel ? ' [' + row.qualityLabel + ']' : '') + ' · ' + row.label}>
+          <i class="material-icons gear-glyph" style="color: {row.color || 'var(--text-dim)'}">{row.icon}</i>
+          <div class="gear-copy">
+            <span class="gear-name">{row.name}</span>
+            <span class="gear-slot">{row.label}</span>
+          </div>
+          {#if row.qualityLabel}
+            <span class="gear-quality" style="color: {row.color}">{row.qualityLabel}</span>
+          {/if}
+        </div>
+      {/each}
+    </div>
     {:else}
     <!-- Skills tab -->
     <div class="game-panel-divider">
@@ -1156,9 +1356,23 @@
       <div class="skills-note">Bind unlocked skills into slots, then add them to the hotbar.</div>
     {/if}
 
+    {#if hotbarSkills.length > 0}
+      <div class="game-panel-divider">
+        <span>Hotbar</span>
+      </div>
+      <div class="hotbar-chips">
+        {#each hotbarSkills as row (row.slot)}
+          <span class="hotbar-chip" title="Press {row.slot} to use {row.name}">
+            <b>{row.slot}</b>{row.name}
+          </span>
+        {/each}
+      </div>
+    {/if}
+
     <div class="skill-slots">
       {#each slotPlaceholders as slot, i}
         {#if slot}
+          {@const hbSlot = hotbarSlotForSkill(hotbarBinds, slot.id || slot.name)}
           <div class="skill-slot">
             <div class="skill-slot-top">
               <img
@@ -1169,7 +1383,9 @@
               />
               <div>
                 <div class="skill-slot-name">{skillName(slot)}</div>
-                <div class="skill-slot-meta">Slot {i + 1} · {formatSkillCost(slot)}</div>
+                <div class="skill-slot-meta">
+                  Slot {i + 1} · {formatSkillCost(slot)}{#if hbSlot > 0} · HB {hbSlot}{/if}
+                </div>
               </div>
             </div>
             <div class="skill-actions">
@@ -1202,6 +1418,7 @@
     {:else}
       <div class="skill-list">
         {#each classified.available as skill (skill.id)}
+          {@const hbSlot = hotbarSlotForSkill(hotbarBinds, skill.id)}
           <div class="skill-card">
             <div class="skill-card-head">
               <img
@@ -1218,6 +1435,9 @@
             <div class="skill-chips">
               <span class="skill-chip level">Lv {skill.levelRequired}</span>
               <span class="skill-chip cost">{formatSkillCost(skill)}</span>
+              {#if hbSlot > 0}
+                <span class="skill-chip hotkey">HB {hbSlot}</span>
+              {/if}
               {#each formatSkillEffects(skill) as chip}
                 <span class="skill-chip">{chip}</span>
               {/each}

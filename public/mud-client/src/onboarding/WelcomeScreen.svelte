@@ -101,6 +101,21 @@
     margin-top: 0.5rem;
   }
 
+  .auth0-group {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0.5rem;
+    width: 100%;
+  }
+
+  .auth0-label {
+    font-size: 0.7rem;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #6b7280;
+  }
+
   .btn-welcome {
     font-size: 0.85rem;
     font-weight: 500;
@@ -112,18 +127,6 @@
     text-decoration: none;
     width: 100%;
     box-sizing: border-box;
-  }
-
-  .btn-welcome.primary {
-    border: none;
-    color: #fff;
-    background: #16a34a;
-  }
-
-  .btn-welcome.primary:hover {
-    background: #15803d;
-    box-shadow: 0 4px 12px rgba(22, 163, 74, 0.3);
-    transform: translateY(-1px);
   }
 
   .btn-welcome.secondary {
@@ -262,6 +265,10 @@
   import { getCharacterTemplates } from "../api/characters.js";
   import { ensureClassCatalog } from "./classCatalog.js";
   import { catalogFallbackTemplates, guestPickerEnabled, originPortraitSrc, racesForTemplate } from "./raceAllow.js";
+  import { isAuth0Configured } from "../authConfig.js";
+  import LocalAuthForm from "./LocalAuthForm.svelte";
+
+  const auth0Configured = isAuth0Configured();
 
   export let login;
   export let serverName = "Tales";
@@ -355,21 +362,32 @@
       </div>
     {/if}
 
+    <LocalAuthForm />
+
+    {#if auth0Configured}
+      <div class="auth0-group">
+        <div class="divider" style="width: 100%; margin: 0.25rem 0;"></div>
+        <span class="auth0-label">Or continue with</span>
+        <div class="buttons">
+          <button class="btn-welcome secondary" type="button" on:click={() => loginWith("twitter")}>
+            Continue with X
+          </button>
+          <button class="btn-welcome secondary" type="button" on:click={() => loginWith("google-oauth2")}>
+            Continue with Google
+          </button>
+          <button class="btn-welcome secondary" type="button" on:click={() => loginWith()}>
+            Email and password
+          </button>
+        </div>
+      </div>
+    {/if}
+
+    <div class="divider"></div>
+
     <div class="buttons">
-      <button class="btn-welcome primary" type="button" on:click={() => loginWith("twitter")}>
-        Continue with X
-      </button>
-      <button class="btn-welcome primary" type="button" on:click={() => loginWith("google-oauth2")}>
-        Continue with Google
-      </button>
-      <button class="btn-welcome secondary" type="button" on:click={() => loginWith()}>
-        Email and password
-      </button>
-
-      <div class="divider" style="width: 100%; margin: 0.25rem 0;"></div>
-
       <button
         class="btn-welcome guest"
+        type="button"
         on:click={handleGuest}
         disabled={guestLoading}
       >

@@ -58,6 +58,7 @@
   import { layoutStore } from "./game/layout/LayoutStore.js";
   import { settingsStore } from "./game/SettingsStore.js";
   import { sshKeysOpen } from "./sshStore.js";
+  import { auditOpen } from "./game/uiChrome.js";
 
   export let isGuest = false;
   export let login = null; // For guest "Create Account" button
@@ -170,6 +171,13 @@
         <a href="/creator" target="_blank">
           <i class="material-icons" style="font-size: 1.2em; vertical-align: middle; margin-right: 0.5em;">public</i>
           World Builder
+        </a>
+      </li>
+      <li>
+        <!-- svelte-ignore a11y-invalid-attribute -->
+        <a href="#!" on:click="{() => auditOpen.set(true)}">
+          <i class="material-icons" style="font-size: 1.2em; vertical-align: middle; margin-right: 0.5em;">history</i>
+          Audit Log
         </a>
       </li>
     {/if}

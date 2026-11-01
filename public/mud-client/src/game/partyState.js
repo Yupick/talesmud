@@ -4,6 +4,31 @@
 
 export const DEFAULT_MAX_PARTY = 5;
 
+/** Loot rules offered to the party leader (B8). */
+export const DEFAULT_LOOT_RULE = 'free';
+export const LOOT_RULES = [
+  { id: 'free', label: 'Free-for-all' },
+  { id: 'leader', label: 'Leader' },
+  { id: 'roundrobin', label: 'Round Robin' },
+  { id: 'needgreed', label: 'Need/Greed' },
+];
+
+const LOOT_RULE_IDS = LOOT_RULES.map((r) => r.id);
+
+/** Coerce any server value to a known loot rule id (defaults to "free"). */
+export function normalizeLootRule(value) {
+  const raw = String(value == null ? '' : value).trim().toLowerCase().replace(/[\s_-]/g, '');
+  if (raw === 'need/greed' || raw === 'needgreed') return 'needgreed';
+  return LOOT_RULE_IDS.includes(raw) ? raw : DEFAULT_LOOT_RULE;
+}
+
+/** Human label for a loot rule id ("roundrobin" → "Round Robin"). */
+export function lootRuleLabel(value) {
+  const id = normalizeLootRule(value);
+  const found = LOOT_RULES.find((r) => r.id === id);
+  return found ? found.label : id;
+}
+
 export function normalizePartyMember(raw) {
   const m = raw && typeof raw === 'object' ? raw : {};
   return {
@@ -31,7 +56,52 @@ export function normalizePartyState(raw) {
     maxMembers,
     members,
     following: !!next.following,
+    lootRule: normalizeLootRule(next.lootRule || next.LootRule),
   };
+}
+
+/**
+ * Pure leadership check used to gate the loot-rule selector + ready check.
+ * Matches by character id first, then by member `isLeader` flags.
+ */
+export function isPartyLeader(party, character) {
+  const p = party && typeof party === 'object' ? party : {};
+  const me = character && typeof character === 'object' ? character : {};
+  const myId = me.id ? String(me.id) : '';
+  const myName = me.name ? String(me.name).toLowerCase() : '';
+  const leaderId = String(p.leaderId || p.leaderCharacterId || p.LeaderCharacterID || '');
+  if (myId && leaderId && myId === leaderId) return true;
+  const members = Array.isArray(p.members) ? p.members : [];
+  for (const m of members) {
+    if (!m) continue;
+    const isMe =
+      (myId && m.id && String(m.id) === myId) ||
+      (myName && m.name && String(m.name).toLowerCase() === myName);
+    if (isMe && (m.isLeader || m.leader)) return true;
+  }
+  return false;
+}
+
+/**
+ * Derive the ready-check phase from the party chat feed (no dedicated signal
+ * exists yet). Scans in order so the newest marker wins:
+ *   "[Party] Ready check! ..."        → active
+ *   "[Party] Ready: X/Y · Not ready"  → active
+ *   "[Party] Ready check over: ..."   → done
+ * Returns 'idle' | 'active' | 'done'.
+ */
+export function classifyReadyCheck(lines) {
+  const list = Array.isArray(lines) ? lines : [];
+  let state = 'idle';
+  for (const line of list) {
+    if (!line) continue;
+    const text = String(line.text != null ? line.text : (line.message != null ? line.message : ''));
+    const lower = text.toLowerCase();
+    if (lower.includes('ready check over')) state = 'done';
+    else if (lower.includes('ready check')) state = 'active';
+    else if (lower.includes('not ready')) state = 'active';
+  }
+  return state;
 }
 
 export function normalizePartyInvite(raw) {

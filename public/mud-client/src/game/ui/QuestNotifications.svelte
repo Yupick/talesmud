@@ -598,6 +598,23 @@
     }
   }
 
+  /* Phones: pin the stack to the viewport and drop the fixed min-width that
+     would otherwise force a horizontal scrollbar. */
+  @media (max-width: 480px) {
+    .quest-notifications {
+      top: 56px;
+      left: 8px;
+      right: 8px;
+      align-items: stretch;
+    }
+    .notification {
+      min-width: 0;
+      width: 100%;
+      max-width: none;
+      box-sizing: border-box;
+    }
+  }
+
   @keyframes acceptPop {
     from {
       opacity: 0;

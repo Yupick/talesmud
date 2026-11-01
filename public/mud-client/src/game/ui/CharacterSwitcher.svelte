@@ -7,7 +7,7 @@
   import { layoutStore } from "../layout/LayoutStore.js";
   import { settingsStore } from "../SettingsStore.js";
   import { openCharacterPicker } from "./characterPickerStore.js";
-  import { accountMenuOpen } from "../uiChrome.js";
+  import { accountMenuOpen, clanPanelOpen, dmsPanelOpen } from "../uiChrome.js";
   import { sshKeysOpen } from "../../sshStore.js";
 
   export let store;
@@ -54,6 +54,8 @@
   $: guest = isGuestSession(authToken);
   $: showFriends = !guest;
   $: showParty = true;
+  $: showClan = !guest;
+  $: showDms = !guest;
   $: resting = !!(!$store.inCombat && $store.characterStats?.resting);
   $: if (showFriends && authToken) {
     loadAccount();
@@ -85,6 +87,18 @@
     if (!showParty) return;
     closeMenu();
     if (store && store.openPartyOverlay) store.openPartyOverlay();
+  }
+
+  function openClan() {
+    if (!showClan) return;
+    closeMenu();
+    clanPanelOpen.set(true);
+  }
+
+  function openDms() {
+    if (!showDms) return;
+    closeMenu();
+    dmsPanelOpen.set(true);
   }
 
   function editLayout() {
@@ -136,6 +150,16 @@
     {#if showFriends}
       <button class="hdr-btn icon-btn" type="button" title="Friends" aria-label="Friends" on:click={openFriends}>
         <i class="material-icons">group</i>
+      </button>
+    {/if}
+    {#if showClan}
+      <button class="hdr-btn icon-btn" type="button" title="Clan (C)" aria-label="Clan" on:click={openClan}>
+        <i class="material-icons">shield</i>
+      </button>
+    {/if}
+    {#if showDms}
+      <button class="hdr-btn icon-btn" type="button" title="Messages (M)" aria-label="Direct messages" on:click={openDms}>
+        <i class="material-icons">mail</i>
       </button>
     {/if}
     <button

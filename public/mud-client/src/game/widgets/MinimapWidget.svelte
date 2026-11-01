@@ -3,6 +3,7 @@
   import { readStageSize, shouldRepaintSize, applyCanvasBitmap } from './atlasLayout.js';
   import { surfaceGroups, groupForRoom } from './surfaceAtlas.js';
   import { paintAtlas, isCurrentPlace, panToCenterPlace, onMapTilesReady, clampMapScale, setYouPortrait } from './atlasRenderer.js';
+  import { buildExitLegend } from '../minimapDirections.js';
 
   export let store = null;
   export let sendMessage = null;
@@ -84,6 +85,16 @@
   $: if (store && $store.mapSelectedId) selectedId = $store.mapSelectedId;
   $: selectedPlace = (atlas.places || []).find(p => p.id === selectedId) || null;
   $: canTravel = !!(selectedPlace && selectedPlace.discovered && selectedPlace.id !== currentRoomId && !isCurrentPlace(selectedPlace.id, currentRoomId));
+
+  // Exit strip: server-emitted exits for the current room, marked explored or
+  // "?" using the atlas discovery flags. Recomputes on room change.
+  $: exitLegend = store && currentRoomId
+    ? buildExitLegend({
+        exits: $store.exits || [],
+        places: atlas.places || [],
+        visitedRooms: $store.visitedRooms || {},
+      })
+    : [];
 
   function requestTravel() {
     if (!canTravel || isTraveling || !selectedPlace) return;
@@ -452,6 +463,56 @@
     border-color: rgba(34, 211, 238, 0.55);
     color: #67e8f9;
   }
+  /* Compact exit strip: direction + explored room name, "?" when unexplored. */
+  .exit-legend {
+    flex: 0 0 auto;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 4px 8px;
+    border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+    overflow-x: auto;
+    scrollbar-width: thin;
+    -webkit-overflow-scrolling: touch;
+  }
+  .exit-legend-label {
+    flex: 0 0 auto;
+    color: #64748b;
+    font-size: 9px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    margin-right: 2px;
+  }
+  .exit-chip {
+    flex: 0 0 auto;
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    max-width: 120px;
+    padding: 2px 6px;
+    border-radius: 5px;
+    border: 1px solid rgba(34, 211, 238, 0.35);
+    background: rgba(34, 211, 238, 0.1);
+    color: #cbd5e1;
+    font-size: 10px;
+    line-height: 1.3;
+  }
+  .exit-chip.unknown {
+    border-color: rgba(148, 163, 184, 0.35);
+    background: rgba(148, 163, 184, 0.08);
+    color: #94a3b8;
+  }
+  .exit-glyph {
+    color: #67e8f9;
+    font-weight: 700;
+  }
+  .exit-chip.unknown .exit-glyph { color: #94a3b8; }
+  .exit-name {
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
   .intel-strip {
     flex: 0 0 auto;
     display: flex;
@@ -541,6 +602,21 @@
       <i class="material-icons">{mapOpen ? 'close_fullscreen' : 'open_in_full'}</i>
     </button>
   </div>
+  {#if exitLegend.length}
+    <div class="exit-legend" aria-label="Exits from this room">
+      <span class="exit-legend-label">Exits</span>
+      {#each exitLegend as ex (ex.key)}
+        <span
+          class="exit-chip"
+          class:unknown={!ex.explored}
+          title={ex.explored ? `${ex.name || ex.direction} → ${ex.label}` : `${ex.name || ex.direction} → unexplored`}
+        >
+          <b class="exit-glyph">{ex.glyph}</b>
+          <span class="exit-name">{ex.label}</span>
+        </span>
+      {/each}
+    </div>
+  {/if}
   <div class="stage stage-compact" bind:this={widgetWrap}>
     <canvas
       bind:this={widgetCanvas}

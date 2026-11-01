@@ -4,6 +4,14 @@
   const rows = [
     ['1 – 9', 'Fire hotbar slots'],
     ['Tab', 'Cycle combat targets'],
+    ['C', 'Open or close Clan'],
+    ['M', 'Open or close Direct Messages'],
+    ['K', 'Open or close the Spellbook'],
+    ['L', 'Open or close the Classes editor'],
+    ['I', 'Open or close the Inventory'],
+    ['N', 'Open or close the Mob / NPC factory'],
+    ['D', 'Open or close the Dungeon Builder'],
+    ['A', 'Open or close the Audit Log'],
     ['Escape', 'Close the top panel'],
     ['?', 'Open or close this list'],
   ];

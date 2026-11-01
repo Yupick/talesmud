@@ -1,12 +1,17 @@
 import assert from "assert";
 import {
   GUEST_TOKEN_KEY,
+  LOCAL_TOKEN_KEY,
   PICKER_SEEN_KEY,
   clearLocalSession,
+  clearLocalToken,
   isGuestSession,
+  isLocalSession,
   readGuestToken,
+  readLocalToken,
   restoredSession,
   shouldAutoOpenCharacterPicker,
+  writeLocalToken,
 } from "./authSession.js";
 
 function mem() {
@@ -38,6 +43,36 @@ function mem() {
   assert.equal(readGuestToken(storage), "");
   assert.equal(storage.getItem(PICKER_SEEN_KEY), null);
   assert.equal(restoredSession({ auth0Authenticated: false, guestToken: readGuestToken(storage) }), "welcome");
+}
+
+{
+  const storage = mem();
+  assert.equal(readLocalToken(storage), "");
+  assert.equal(isLocalSession("local-token", storage), false);
+  writeLocalToken("local-token", storage);
+  assert.equal(storage.getItem(LOCAL_TOKEN_KEY), "local-token");
+  assert.equal(readLocalToken(storage), "local-token");
+  assert.equal(isLocalSession("local-token", storage), true);
+  assert.equal(isLocalSession("guest-token", storage), false);
+  // A local account outranks a leftover guest token.
+  assert.equal(
+    restoredSession({ auth0Authenticated: false, guestToken: "guest-token", localToken: "local-token" }),
+    "local"
+  );
+  assert.equal(restoredSession({ auth0Authenticated: false, localToken: "" }), "welcome");
+  writeLocalToken("", storage);
+  assert.equal(readLocalToken(storage), "local-token");
+  clearLocalToken(storage);
+  assert.equal(readLocalToken(storage), "");
+}
+
+{
+  const storage = mem();
+  storage.setItem(GUEST_TOKEN_KEY, "guest-token");
+  storage.setItem(LOCAL_TOKEN_KEY, "local-token");
+  clearLocalSession(storage);
+  assert.equal(readGuestToken(storage), "");
+  assert.equal(readLocalToken(storage), "");
 }
 
 assert.equal(shouldAutoOpenCharacterPicker({ guest: false, seen: false, characterCount: 9 }), true);

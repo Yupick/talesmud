@@ -26,10 +26,12 @@
 
   export let onTerminalReady = () => {};
   export let onInput = () => {};
+  // Passed through so Tab can autocomplete room player names.
+  export let store = null;
 </script>
 
 <div class="mobile-console">
   <div class="terminal-container">
-    <TerminalXWidget {onTerminalReady} {onInput} />
+    <TerminalXWidget {onTerminalReady} {onInput} {store} />
   </div>
 </div>

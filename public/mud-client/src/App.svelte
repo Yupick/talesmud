@@ -138,8 +138,9 @@
       phase = "ready";
     } else if (!$isAuthenticated) {
       phase = "welcome";
-    } else if ($authToken && !loadingUser && phase === "loading") {
-      // Only trigger once (when phase is still "loading")
+    } else if ($authToken && !loadingUser && (phase === "loading" || phase === "welcome")) {
+      // Runs after a page reload ("loading") and after an in-page local
+      // username/password login ("welcome"), which does not reload.
       isGuest = false;
       loadOnboardingData();
     }

@@ -1,5 +1,5 @@
 import assert from 'assert';
-import { combatStageFocus, hotbarSlotFromKey, isTextEntry, topOpenPanel, prefersReducedMotion } from './keyboardShortcuts.js';
+import { combatStageFocus, hotbarSlotFromKey, isTextEntry, topOpenPanel, prefersReducedMotion, KEY_INVENTORY_QUICK, PANEL_ORDER } from './keyboardShortcuts.js';
 import { settingsStore } from './SettingsStore.js';
 
 globalThis.localStorage = { setItem() {}, getItem() { return null; } };
@@ -29,6 +29,12 @@ assert.equal(topOpenPanel({}), '');
 assert.equal(topOpenPanel({ battleOutcome: true, inventory: true }), 'inventory');
 assert.equal(topOpenPanel({ pickup: true, inventory: true }), 'pickup');
 assert.equal(topOpenPanel({ pickup: true, settings: true }), 'settings');
+
+// Quick inventory toggle (tecla I).
+assert.equal(KEY_INVENTORY_QUICK, 'I');
+assert.ok(PANEL_ORDER.includes('inventoryQuick'), 'inventoryQuick está en PANEL_ORDER');
+assert.equal(topOpenPanel({ inventoryQuick: true }), 'inventoryQuick');
+assert.equal(topOpenPanel({ inventoryQuick: true, inventory: true }), 'inventory', 'inventory gana a inventoryQuick');
 
 console.log('keyboardShortcuts_test ok');
 
