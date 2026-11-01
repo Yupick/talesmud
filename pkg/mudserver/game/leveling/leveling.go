@@ -10,7 +10,32 @@ import (
 
 const (
 	MaxLevel = 50 // Hard level cap
+
+	// TalentMilestoneInterval is the level step that awards one talent point.
+	// Levels 5, 10, ... 50 therefore grant 10 points before prestige.
+	TalentMilestoneInterval = 5
 )
+
+// TalentMilestonesBetween counts the milestone levels in (oldLevel, newLevel].
+// It is the number of talent points a level-up jump should award. The range is
+// half-open so a normal single-level step awards at most one point and calling
+// it twice for the same step would award zero the second time.
+func TalentMilestonesBetween(oldLevel, newLevel int32) int {
+	if newLevel <= oldLevel {
+		return 0
+	}
+	start := oldLevel + 1
+	if start < 1 {
+		start = 1
+	}
+	count := 0
+	for level := start; level <= newLevel; level++ {
+		if level%TalentMilestoneInterval == 0 {
+			count++
+		}
+	}
+	return count
+}
 
 // LevelUpResult contains all changes from a level-up event
 type LevelUpResult struct {
@@ -22,6 +47,8 @@ type LevelUpResult struct {
 	AttributeGains         map[string]int32 // attribute short name -> gain amount
 	AttributePointsGained  int32            // distributable points earned
 	UnspentAttributePoints int32            // total unspent after this level-up
+	TalentPointsGained     int32            // talent points earned on milestones
+	UnspentTalentPoints    int32            // total unspent talent points after this level-up
 	MaxHitPoints           int32            // max HP after level-up
 	MaxMana                int32            // max mana after level-up
 	Message                string           // Formatted level-up message for player
@@ -108,6 +135,13 @@ func ApplyLevelUp(char *characters.Character, levelsGained int) *LevelUpResult {
 
 	char.EquippedSkills = skills.FillHotbar(char.Class.ID, char.Level, char.EquippedSkills)
 
+	// Award a talent point at each five-level milestone crossed. oldLevel is
+	// the level before this call, so each milestone is counted exactly once.
+	talentPointsGained := int32(TalentMilestonesBetween(oldLevel, newLevel))
+	if talentPointsGained > 0 {
+		char.Talents.Points += talentPointsGained
+	}
+
 	// Build result with formatted message
 	result := &LevelUpResult{
 		OldLevel:               oldLevel,
@@ -118,16 +152,18 @@ func ApplyLevelUp(char *characters.Character, levelsGained int) *LevelUpResult {
 		AttributeGains:         attributeGains,
 		AttributePointsGained:  pointsGained,
 		UnspentAttributePoints: char.UnspentAttributePoints,
+		TalentPointsGained:     talentPointsGained,
+		UnspentTalentPoints:    char.Talents.Points,
 		MaxHitPoints:           char.MaxHitPoints,
 		MaxMana:                char.MaxMana,
-		Message:                formatLevelUpMessage(oldLevel, newLevel, levelsGained, hpGained, manaGained, attributeGains, pointsGained, char),
+		Message:                formatLevelUpMessage(oldLevel, newLevel, levelsGained, hpGained, manaGained, attributeGains, pointsGained, talentPointsGained, char),
 	}
 
 	return result
 }
 
 // formatLevelUpMessage creates a formatted level-up notification message
-func formatLevelUpMessage(oldLevel, newLevel int32, levelsGained int, hpGained int32, manaGained int32, attributeGains map[string]int32, pointsGained int32, char *characters.Character) string {
+func formatLevelUpMessage(oldLevel, newLevel int32, levelsGained int, hpGained int32, manaGained int32, attributeGains map[string]int32, pointsGained int32, talentPointsGained int32, char *characters.Character) string {
 	// Header
 	message := "╔══════════════════════════════════════════════════╗\n"
 	message += "║                    LEVEL UP!                     ║\n"
@@ -156,6 +192,12 @@ func formatLevelUpMessage(oldLevel, newLevel int32, levelsGained int, hpGained i
 	if pointsGained > 0 {
 		message += fmt.Sprintf("  + %d Attribute Point(s) to distribute! (total unspent: %d)\n", pointsGained, char.UnspentAttributePoints)
 		message += "  Use 'spend <attribute> [amount]' to allocate.\n"
+	}
+
+	// Talent milestone points
+	if talentPointsGained > 0 {
+		message += fmt.Sprintf("  + %d Talent Point(s) earned! (total unspent: %d)\n", talentPointsGained, char.Talents.Points)
+		message += "  Use 'talents list' and 'talents spend <talent>'.\n"
 	}
 
 	// Flavor text

@@ -60,8 +60,8 @@ func (v *View) Active() bool {
 // A returning account applies the pending dawn pass before the first paint.
 func (v *View) OnConnect(user *entities.User, send func(any)) {
 	v.ensureReturning(user)
-	if user != nil && user.LastCharacter != "" && v != nil && v.Game != nil && v.Game.GetFacade() != nil {
-		if ch, err := v.Game.GetFacade().CharactersService().FindByID(user.LastCharacter); err == nil && ch != nil {
+	if lastCharacter := v.lastCharacter(user); lastCharacter != "" && v != nil && v.Game != nil && v.Game.GetFacade() != nil {
+		if ch, err := v.Game.GetFacade().CharactersService().FindByID(lastCharacter); err == nil && ch != nil {
 			v.Game.ApplySessionStart(ch)
 			v.Game.EnsureLivingRoom(ch)
 			if line := v.Game.TakeRelocationNotice(ch.ID); line != "" {
@@ -70,6 +70,16 @@ func (v *View) OnConnect(user *entities.User, send func(any)) {
 		}
 	}
 	v.paint(user, send)
+}
+
+// lastCharacter returns the active character of the user, read through the
+// presence lock. The game loop writes LastCharacter while this view reads it
+// from the websocket goroutine (Batch 23).
+func (v *View) lastCharacter(user *entities.User) string {
+	if v == nil || v.Game == nil || user == nil {
+		return ""
+	}
+	return v.Game.PresenceOf(user).LastCharacter
 }
 
 // OnInput turns a key or a typed line into an engine command, then repaints.
@@ -437,7 +447,7 @@ func (v *View) paint(user *entities.User, send func(any)) {
 		send(ansi.Render(page))
 		return
 	}
-	char, err := facade.CharactersService().FindByID(user.LastCharacter)
+	char, err := facade.CharactersService().FindByID(v.lastCharacter(user))
 	if err != nil || char == nil {
 		v.setPhase(user.ID, "name")
 		page.Location = "Characters"
@@ -967,7 +977,7 @@ func stripANSI(s string) string {
 }
 
 func (v *View) ensureReturning(user *entities.User) {
-	if v == nil || user == nil || user.LastCharacter != "" || v.Game == nil || v.Game.GetFacade() == nil {
+	if v == nil || user == nil || v.lastCharacter(user) != "" || v.Game == nil || v.Game.GetFacade() == nil {
 		return
 	}
 	chars, err := v.Game.GetFacade().CharactersService().FindAllForUser(user.ID)
@@ -988,10 +998,11 @@ func (v *View) ensureReturning(user *entities.User) {
 }
 
 func (v *View) noCharacter(user *entities.User) bool {
-	if user == nil || user.LastCharacter == "" || v == nil || v.Game == nil || v.Game.GetFacade() == nil {
+	lastCharacter := v.lastCharacter(user)
+	if lastCharacter == "" || v == nil || v.Game == nil || v.Game.GetFacade() == nil {
 		return true
 	}
-	ch, err := v.Game.GetFacade().CharactersService().FindByID(user.LastCharacter)
+	ch, err := v.Game.GetFacade().CharactersService().FindByID(lastCharacter)
 	return err != nil || ch == nil
 }
 
@@ -999,7 +1010,7 @@ func (v *View) character(user *entities.User) *characters.Character {
 	if v.noCharacter(user) {
 		return nil
 	}
-	ch, err := v.Game.GetFacade().CharactersService().FindByID(user.LastCharacter)
+	ch, err := v.Game.GetFacade().CharactersService().FindByID(v.lastCharacter(user))
 	if err != nil {
 		return nil
 	}

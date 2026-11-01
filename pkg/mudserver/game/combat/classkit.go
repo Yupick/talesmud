@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"math"
 
+	"github.com/google/uuid"
 	entcombat "github.com/talesmud/talesmud/pkg/entities/combat"
 	"github.com/talesmud/talesmud/pkg/entities/skills"
 	"github.com/talesmud/talesmud/pkg/mudserver/game/balance"
@@ -98,8 +99,19 @@ func (e *Engine) processClassKit(instance *entcombat.CombatInstance, caster *ent
 			return kitFail(skill.Name, fmt.Sprintf("%s is on cooldown (%d rounds remaining)", skill.Name, cd))
 		}
 	}
+	// A kit skill may cost mana on top of its cooldown. The cost is checked
+	// before anything is committed, so a failed cast pays nothing.
+	if skill.ManaCost > 0 && caster.CurrentMana < skill.ManaCost {
+		return kitFail(skill.Name, fmt.Sprintf("Not enough mana for %s (need %d, have %d).", skill.Name, skill.ManaCost, caster.CurrentMana))
+	}
 
 	pay := func() {
+		if skill.ManaCost > 0 {
+			caster.CurrentMana -= skill.ManaCost
+			if caster.CurrentMana < 0 {
+				caster.CurrentMana = 0
+			}
+		}
 		if skill.OncePerFight {
 			markKitSpent(caster, id)
 		} else if skill.CooldownRounds > 0 {
@@ -371,6 +383,86 @@ func (e *Engine) processClassKit(instance *entcombat.CombatInstance, caster *ent
 		msg := "You overload the rig. Its remaining hits hit harder."
 		e.kitLog(instance, caster, nil, msg, 0)
 		return SkillResult{Success: true, SkillName: skill.Name, Messages: []string{msg}}
+
+	case skills.KitMend:
+		target := livingAllyTarget(instance, caster, targetID)
+		if target == nil {
+			return kitFail(skill.Name, "Nobody to mend.")
+		}
+		pay()
+		caster = instance.GetCombatantByID(caster.ID)
+		target = instance.GetCombatantByID(target.ID)
+		if caster == nil || target == nil {
+			return kitFail(skill.Name, "Nobody to mend.")
+		}
+		mult := skill.SwingMult
+		if mult <= 0 {
+			mult = 0.25
+		}
+		amount := int32(math.Round(float64(caster.MaxHP) * mult))
+		if amount < 1 {
+			amount = 1
+		}
+		target.CurrentHP += amount
+		if target.CurrentHP > target.MaxHP {
+			target.CurrentHP = target.MaxHP
+		}
+		e.UpdateCombatant(instance, target)
+		var msg string
+		if target.ID == caster.ID {
+			msg = fmt.Sprintf("%s casts %s, restoring %d HP! (%d/%d HP)",
+				caster.Name, skill.Name, amount, target.CurrentHP, target.MaxHP)
+		} else {
+			msg = fmt.Sprintf("%s casts %s on %s, restoring %d HP! (%d/%d HP)",
+				caster.Name, skill.Name, target.Name, amount, target.CurrentHP, target.MaxHP)
+		}
+		if skill.ManaCost > 0 {
+			msg += fmt.Sprintf(" (mana -%d)", skill.ManaCost)
+		}
+		e.kitLog(instance, caster, target, msg, 0)
+		return SkillResult{Success: true, SkillName: skill.Name, TotalHeal: amount, Messages: []string{msg}}
+
+	case skills.KitRenew:
+		target := livingAllyTarget(instance, caster, targetID)
+		if target == nil {
+			return kitFail(skill.Name, "Nobody to renew.")
+		}
+		pay()
+		caster = instance.GetCombatantByID(caster.ID)
+		target = instance.GetCombatantByID(target.ID)
+		if caster == nil || target == nil {
+			return kitFail(skill.Name, "Nobody to renew.")
+		}
+		mult := skill.SwingMult
+		if mult <= 0 {
+			mult = 0.10
+		}
+		tick := int32(math.Round(float64(caster.MaxHP) * mult))
+		if tick < 1 {
+			tick = 1
+		}
+		rounds := skill.Duration
+		if rounds <= 0 {
+			rounds = 3
+		}
+		e.applyStatusEffect(instance, target, entcombat.StatusEffect{
+			ID:       uuid.New().String(),
+			SkillID:  skill.ID,
+			Name:     skill.Name,
+			Type:     "hot",
+			Value:    tick,
+			Duration: rounds,
+			SourceID: caster.ID,
+		})
+		e.UpdateCombatant(instance, target)
+		msg := fmt.Sprintf("%s casts %s on %s! (Healing %d per round for %d rounds)",
+			caster.Name, skill.Name, target.Name, tick, rounds)
+		if skill.ManaCost > 0 {
+			msg += fmt.Sprintf(" (mana -%d)", skill.ManaCost)
+		}
+		e.kitLog(instance, caster, target, msg, 0)
+		return SkillResult{Success: true, SkillName: skill.Name, Messages: []string{msg}}
+
 	default:
 		return kitFail(skill.Name, "The skill does nothing.")
 	}
@@ -401,6 +493,34 @@ func livingKitTarget(instance *entcombat.CombatInstance, caster *entcombat.Comba
 		}
 	}
 	return nil
+}
+
+// livingAllyTarget resolves a friendly target for a heal or HoT kit.
+// The explicit target wins when it is alive, still in the fight, and on the
+// caster's side; otherwise the caster is the fallback. It never returns an
+// enemy, so mend/renew cannot be turned against a foe.
+func livingAllyTarget(instance *entcombat.CombatInstance, caster *entcombat.CombatantRef, targetID string) *entcombat.CombatantRef {
+	if instance == nil || caster == nil {
+		return nil
+	}
+	if targetID != "" {
+		if t := instance.GetCombatantByID(targetID); t != nil && t.IsAlive && !t.HasFled && sameSide(caster, t) {
+			return t
+		}
+	}
+	return instance.GetCombatantByID(caster.ID)
+}
+
+// sameSide reports whether two combatants fight on the same side. Players are
+// allies of players and enemies of NPCs; the reverse holds for an NPC caster.
+func sameSide(a, b *entcombat.CombatantRef) bool {
+	if a == nil || b == nil {
+		return false
+	}
+	if a.ID == b.ID {
+		return true
+	}
+	return a.Type == b.Type
 }
 
 func explicitStillHere(instance *entcombat.CombatInstance, targetID string) bool {

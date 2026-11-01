@@ -1175,6 +1175,37 @@ func (c *CombatController) cleanupCombatInstance(instance *combat.CombatInstance
 		"instanceID": instance.ID,
 		"endState":   endState,
 	}).Info("Combat instance cleaned up")
+
+	partySize := len(instance.Players)
+	characterID := ""
+	if len(instance.Players) > 0 {
+		characterID = instance.Players[0].ID
+	}
+	if characterID != "" {
+		partySize = c.game.dmPartySize(characterID, partySize)
+	}
+	c.game.TriggerDMNarration(DMNarrationRequest{
+		Event:     "combatEnd",
+		RoomID:    instance.OriginRoomID,
+		RoomName:  c.game.dmRoomName(instance.OriginRoomID),
+		NPCName:   firstEnemyName(instance),
+		Outcome:   string(endState),
+		Round:     instance.Round,
+		PartySize: partySize,
+	})
+}
+
+// firstEnemyName returns the name of the first enemy in the instance, or "".
+func firstEnemyName(instance *combat.CombatInstance) string {
+	if instance == nil {
+		return ""
+	}
+	for _, enemy := range instance.Enemies {
+		if strings.TrimSpace(enemy.Name) != "" {
+			return enemy.Name
+		}
+	}
+	return ""
 }
 
 func (c *CombatController) refreshOriginRoomAfterCombat(instance *combat.CombatInstance) {
@@ -1273,6 +1304,63 @@ func (c *CombatController) processCombatVictory(instance *combat.CombatInstance)
 					}
 					c.game.sendMessage <- uniqueDropMessage(room.ID, npcData.GetDisplayName(), item.Name)
 				}
+				itemsToAssign := append([]*items.Item(nil), lootResult.Items...)
+				lootResult.Items = make([]*items.Item, 0, len(itemsToAssign))
+				// Try to build minimal ctx if not yet ready
+				if len(itemsToAssign) > 0 {
+					var ctx *LootAssignmentContext
+					if c.game != nil {
+						var partyID string
+						var lootRule string
+						if len(livingPlayers) > 0 && livingPlayers[0] != nil {
+							if p, r := partyForChar(c.game.Facade, livingPlayers[0].ID); p != nil {
+								partyID = p.ID
+								lootRule = r
+							}
+						}
+						if lootRule == "" {
+							lootRule = "free"
+						}
+						e := make([]string, 0)
+						for _, lp := range livingPlayers {
+							if lp != nil && lp.ID != "" {
+								e = append(e, lp.ID)
+							}
+						}
+						ctx = &LootAssignmentContext{Game: c.game, PartyID: partyID, LootRule: lootRule, Eligible: e, KillerID: func() string {
+							if len(livingPlayers) > 0 && livingPlayers[0] != nil {
+								return livingPlayers[0].ID
+							}
+							return ""
+						}(), RoomID: instance.OriginRoomID, RoundRobin: new(int)}
+					}
+					if ctx != nil && ctx.LootRule != "free" {
+						party, _ := c.game.Facade.PartiesService().GetPartyByID(ctx.PartyID)
+						for _, item := range itemsToAssign {
+							recipient, _, reason := selectLootRecipient(ctx)
+							if recipient == "" {
+								lootResult.Items = append(lootResult.Items, item)
+								continue
+							}
+							stored, gerr := giveItemToCharacter(c.game, recipient, item)
+							if gerr == nil && stored != nil {
+								name := stored.Name
+								if strings.TrimSpace(name) == "" {
+									name = item.Name
+								}
+								allLootItems = append(allLootItems, name)
+								recName := charName(c.game.Facade, recipient)
+								if party != nil {
+									sendPartyMessage(c.game, ctx.PartyID, fmt.Sprintf("[Party] %s → %s (%s)", name, recName, reason))
+								}
+								continue
+							}
+							lootResult.Items = append(lootResult.Items, item)
+						}
+					} else {
+						lootResult.Items = append(lootResult.Items, itemsToAssign...)
+					}
+				}
 				for _, reveal := range lootReveals(lootResult.Items, lootResult.RareUnique) {
 					allLoot = append(allLoot, reveal)
 					if reveal.Quantity > 1 {
@@ -1332,6 +1420,7 @@ func (c *CombatController) processCombatVictory(instance *combat.CombatInstance)
 	if killerName == "" && len(shares) > 0 {
 		killerName = shares[0].Name
 	}
+
 	var shareBlock, toast string
 	if partySplit {
 		shareBlock = partyShareSummary(shares, killerName)
@@ -1355,7 +1444,9 @@ func (c *CombatController) processCombatVictory(instance *combat.CombatInstance)
 		if len(marked) > 0 {
 			char.FirstBossKills = append(char.FirstBossKills, marked...)
 		}
-		awardedXP := share.XP + fkXP
+		// Prestige multiplies all combat XP (share + first-kill). Gold is
+		// untouched; the design only scales XP.
+		awardedXP := int64(float64(share.XP+fkXP) * char.PrestigeMultiplier())
 		awardedGold := share.Gold + fkGold
 		breakdown := messages.RewardBreakdown{
 			BaseXP:         baseXP,

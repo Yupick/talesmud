@@ -83,6 +83,9 @@ func (commandProcessor *CommandProcessor) registerCommands() {
 	commandProcessor.RegisterCommand(&PartyCommand{}, "Party commands: party create|invite|accept|decline|leave|list|say or party <message>", "party", "p")
 	commandProcessor.RegisterCommand(&ScreamCommand{}, "Scream through the room", "scream")
 	commandProcessor.RegisterCommand(&ShrugCommand{}, "Shrug emote", "shrug")
+	// Global chat channels. "chat <channel> <message>" reaches all channels;
+	// direct shortcuts skip the channels already claimed by help and trade.
+	commandProcessor.RegisterCommand(&ChannelsCommand{}, "Chat in a global channel: general|trade|lfg|help|roleplay|admin <message>", "chat", "general", "lfg", "roleplay", "admin")
 	commandProcessor.RegisterCommand(&SelectCharacterCommand{}, "Select a character, use: sc [charactername]", "sc", "selectcharacter")
 	commandProcessor.RegisterCommand(&ListCharactersCommand{}, "List all your characters", "lc", "listcharacters")
 	commandProcessor.RegisterCommand(&HelpCommand{processor: commandProcessor}, "Are you really asking?", "h", "help")
@@ -92,6 +95,7 @@ func (commandProcessor *CommandProcessor) registerCommands() {
 	commandProcessor.RegisterCommand(&CharacterCommand{}, "Display character stats", "character", "char", "stats")
 	commandProcessor.RegisterCommand(&NewCharacterCommand{}, "Create a new character", "newcharacter", "nc")
 	commandProcessor.RegisterCommand(&TalkCommand{}, "Talk to an NPC: talk [npc-name]", "talk", "speak")
+	commandProcessor.RegisterCommand(&AskCommand{}, "Ask an NPC a free-form question: ask <npc-name> [question]", "ask")
 
 	// Item commands
 	commandProcessor.RegisterCommand(&PickupCommand{}, "Pick up an item: pickup [item]", "pickup", "get", "take")
@@ -135,6 +139,7 @@ func (commandProcessor *CommandProcessor) registerCommands() {
 	commandProcessor.RegisterCommand(&QuestDetailCommand{}, "Show quest details: quest [name]", "quest")
 	commandProcessor.RegisterCommand(&AbandonQuestCommand{}, "Abandon a quest: abandon [name]", "abandon")
 	commandProcessor.RegisterCommand(&CompleteQuestCommand{}, "Turn in a quest from the log: complete [name]", "complete", "turnin")
+	commandProcessor.RegisterCommand(&OfferQuestCommand{}, "Ask a quest-giver NPC for work: offer <npc> (offer accept|decline)", "offer")
 
 	// Respawn commands
 	commandProcessor.RegisterCommand(&BindCommand{}, "Bind respawn point: bind", "bind")
@@ -144,6 +149,8 @@ func (commandProcessor *CommandProcessor) registerCommands() {
 
 	// Character progression commands
 	commandProcessor.RegisterCommand(&SpendCommand{}, "Spend attribute points: spend <attr> [amount]", "spend")
+	commandProcessor.RegisterCommand(&TalentsCommand{}, "Talents: talents [list], talents spend <talent>", "talents", "talent")
+	commandProcessor.RegisterCommand(&PrestigeCommand{}, "Prestige: prestige, prestige confirm (level 50+)", "prestige")
 
 	// Gathering & crafting (no profession gate — everyone can gather/craft)
 	commandProcessor.RegisterCommand(&GatherCommand{}, "Gather from world nodes: gather|forage|harvest [target]", "gather", "forage", "harvest")

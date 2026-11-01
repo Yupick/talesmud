@@ -88,6 +88,10 @@ type server struct {
 	Clients   *clientRegistry
 	Broadcast chan interface{}
 	Upgrader  websocket.Upgrader
+
+	// joins absorbs login bursts without blocking connection read loops;
+	// forwardJoins is the only goroutine that blocks on Game.OnUserJoined.
+	joins *joinQueue
 }
 
 func (server *server) GameCtrl() def.GameCtrl {
@@ -145,6 +149,7 @@ func New(facade service.Facade, allowedOrigins []string) MUDServer {
 		Clients:   newClientRegistry(),
 		Broadcast: make(chan interface{}),
 		Game:      game,
+		joins:     newJoinQueue(joinQueueWarnAt),
 	}
 
 	if gamemode.ANSI() {
@@ -166,10 +171,30 @@ func (server *server) Run() {
 
 	go server.receiveMessages()
 	go server.Game.Run()
+	go server.forwardJoins()
 	go server.handleBroadcastMessages()
 	go server.handleClientTimeouts()
 
 	log.WithTime(time.Now()).Info("MUD Server running")
+}
+
+// forwardJoins drains the join queue onto the game loop. This goroutine —
+// and only this one — may block on Game.OnUserJoined, so a slow game loop
+// back-pressures here instead of on every connection's read loop (QA B19.3).
+func (server *server) forwardJoins() {
+	for {
+		joined, ok := server.joins.pop()
+		if !ok {
+			return
+		}
+		server.Game.OnUserJoined <- joined
+	}
+}
+
+// enqueueUserJoined queues a join and returns immediately. Joins are never
+// dropped: the queue is unbounded and forwarded by forwardJoins.
+func (server *server) enqueueUserJoined(user *entities.User) {
+	server.joins.push(&messages.UserJoined{User: user})
 }
 
 func (server *server) handleClientTimeouts() {
@@ -228,7 +253,13 @@ func (server *server) HandleConnections(c *gin.Context) {
 	// Make sure we close the connection when the function returns
 	defer ws.Close()
 
-	connection := server.attachSession(user, &wsTransport{conn: ws, ip: remoteIP})
+	connection := server.attachSession(user, newWSTransport(ws, remoteIP))
+	// The read loop bounds this transport's lifetime: whatever path makes
+	// this handler return, the transport must be closed so its writeLoop
+	// goroutine leaves its select instead of leaking one goroutine per
+	// disconnected client (QA B21.5). Close is idempotent (sync.Once in
+	// wsTransport), so the explicit detach below may already have run it.
+	defer connection.closeTransport(0, "")
 
 	for {
 		// Read in a new message as JSON and map it to a Message object
@@ -239,7 +270,7 @@ func (server *server) HandleConnections(c *gin.Context) {
 				"userId":      user.ID,
 				"nickname":    user.Nickname,
 				"ip":          remoteIP,
-				"characterId": user.LastCharacter,
+				"characterId": server.Game.PresenceOf(user).LastCharacter,
 			}).Info("WS read error")
 			server.detachSession(user, connection)
 			break
@@ -303,7 +334,7 @@ func (server *server) attachSession(user *entities.User, t Transport) *Connectio
 			"nickname":    user.Nickname,
 			"ip":          remoteIP,
 			"oldIP":       old.remoteIP,
-			"characterId": user.LastCharacter,
+			"characterId": server.Game.PresenceOf(user).LastCharacter,
 			"reason":      "session replaced",
 			"oldKind":     old.Kind(),
 			"kind":        connection.Kind(),
@@ -315,14 +346,19 @@ func (server *server) attachSession(user *entities.User, t Transport) *Connectio
 		"userId":      user.ID,
 		"nickname":    user.Nickname,
 		"ip":          remoteIP,
-		"characterId": user.LastCharacter,
+		"characterId": server.Game.PresenceOf(user).LastCharacter,
 		"replaced":    old != nil,
 		"kind":        connection.Kind(),
 	}).Info("WS upgrade")
 
-	user.LastSeen = time.Now()
-	user.IsOnline = true
-	server.Facade.UsersService().Update(user.RefID, user)
+	// The presence fields are written under the presence lock: the game loop
+	// refreshes them on every input line of the same user, and the close
+	// path writes them again (Batch 23).
+	server.Game.ApplyPresence(user, func(u *entities.User) bool {
+		u.LastSeen = time.Now()
+		u.IsOnline = true
+		return true
+	})
 
 	serverName := "TalesMUD"
 	if ss, err := server.Facade.ServerSettingsService().Get(); err == nil && ss.ServerName != "" {
@@ -335,9 +371,7 @@ func (server *server) attachSession(user *entities.User, t Transport) *Connectio
 	} else {
 		server.sendMessage(user.ID, messages.NewRoomBasedMessage("", "Connected to ["+serverName+"] ..."))
 
-		server.Game.OnUserJoined <- &messages.UserJoined{
-			User: user,
-		}
+		server.enqueueUserJoined(user)
 	}
 
 	server.armGuestExpiry(user, connection)
@@ -397,10 +431,11 @@ func (server *server) handleInput(user *entities.User, text string, isKey bool) 
 		})
 		return
 	}
+	// Presence refresh is in-memory only here. LastSeen/IsOnline are persisted
+	// on connect (attachSession) and on disconnect (handleConnectionClosed),
+	// not on every input: the two synchronous SQLite writes per message were
+	// the dominant cost of the hot path under load (QA B19.6-1).
 	server.Game.ConnectUserSession(user)
-	user.LastSeen = time.Now()
-	user.IsOnline = true
-	server.Facade.UsersService().Update(user.RefID, user)
 	if text != "" {
 		server.Game.OnMessageReceived() <- messages.NewMessage(user, text)
 	}
@@ -469,13 +504,23 @@ func (server *server) handleConnectionClosed(user *entities.User, connection *Co
 		return false
 	}
 
+	// This session is over for good: stop its writer. wsTransport.Close
+	// closes the done channel exactly once (sync.Once), which wakes writeLoop
+	// out of its select; the bare `defer ws.Close()` in HandleConnections
+	// only drops the socket and would leave that goroutine parked forever
+	// (QA B21.5). Callers that already tore the socket down — slow consumer,
+	// send/broadcast error, session replace, guest expiry — call this a
+	// second time safely. The stale branch above returns before this because
+	// a replaced connection was already closed with 4001 by attachSession.
+	connection.closeTransport(0, "")
+
 	connection.active = false
 
 	log.WithFields(log.Fields{
 		"userId":      user.ID,
 		"nickname":    user.Nickname,
 		"ip":          connection.remoteIP,
-		"characterId": user.LastCharacter,
+		"characterId": server.Game.PresenceOf(user).LastCharacter,
 		"reason":      "connection closed",
 	}).Info("WS close")
 
@@ -483,9 +528,13 @@ func (server *server) handleConnectionClosed(user *entities.User, connection *Co
 		User: user,
 	}
 
-	user.IsOnline = false
-	user.LastSeen = time.Now()
-	server.Facade.UsersService().Update(user.RefID, user)
+	// The presence fields are written under the presence lock: the game loop
+	// can be refreshing the same user while this socket dies (Batch 23).
+	server.Game.ApplyPresence(user, func(u *entities.User) bool {
+		u.IsOnline = false
+		u.LastSeen = time.Now()
+		return true
+	})
 
 	return true
 }

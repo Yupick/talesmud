@@ -1,6 +1,8 @@
 package game
 
 import (
+	"os"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -8,6 +10,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"github.com/talesmud/talesmud/pkg/entities"
+	"github.com/talesmud/talesmud/pkg/entities/quests"
 
 	"github.com/talesmud/talesmud/pkg/instances"
 	c "github.com/talesmud/talesmud/pkg/mudserver/game/commands"
@@ -62,6 +65,13 @@ type Game struct {
 
 	Sessions *sessionRegistry
 
+	// presence owns the mutable presence fields (IsOnline, LastSeen,
+	// LastCharacter) of every live *entities.User. The websocket goroutine,
+	// the game loop and the connection-close goroutine share those users, so
+	// every read and write of those fields goes through this lock (Batch 23).
+	// It is a value, so the zero Game is usable.
+	presence presenceRegistry
+
 	// relocNotice is one login line per character moved by the instance sweep.
 	// The sweep runs at process start, before anyone connects, so the map
 	// only has to live until that character's next login in this process.
@@ -81,6 +91,37 @@ type Game struct {
 	// loopOn is set only after Run starts that loop. Call runs inline until then.
 	jobs   chan gameJob
 	loopOn atomic.Bool
+
+	// dmNarrator, when set, narrates combat/quest beats in prose. It runs off
+	// the command loop and posts its line back through Call. Nil disables it.
+	dmMu           sync.Mutex
+	dmNarrator     DMNarratorFunc
+	dmCooldown     map[string]time.Time
+	dmSem          chan struct{}
+	dmCooldownWin  time.Duration
+	dmTimeout      time.Duration
+	dmMaxPerMinute int
+	dmMinuteMu     sync.Mutex
+	dmMinuteEvents []time.Time
+	dmEnabled      bool
+
+	// questOfferMu guards the contextual quest offer state. The generator runs
+	// off the command loop and posts results back through Call. A nil provider
+	// disables the feature.
+	questOfferMu       sync.Mutex
+	questOfferProvider def.ContextualQuestProviderFunc
+	questOfferCooldown map[string]time.Time
+	questOfferPending  map[string]*quests.Quest
+	questOfferSem      chan struct{}
+
+	// npcDialogueMu guards the free-form NPC dialogue state (Phase 6.3). The
+	// provider runs off the command loop and posts replies back through Call.
+	// A nil provider disables the feature and callers fall back to authored
+	// dialog.
+	npcDialogueMu       sync.Mutex
+	npcDialogueProvider def.NPCDialogueProviderFunc
+	npcDialogueCooldown map[string]time.Time
+	npcDialogueSem      chan struct{}
 
 	//world *World
 }
@@ -113,6 +154,40 @@ func New(facade service.Facade) *Game {
 	g.aggro.cooldown = map[string]time.Time{}
 	g.aggro.ch = g.aggroCh
 	g.jobs = make(chan gameJob, 32)
+	g.dmCooldown = map[string]time.Time{}
+	g.dmSem = make(chan struct{}, dmMaxConcurrent)
+	g.dmCooldownWin = dmCooldownWindowDefault
+	g.dmTimeout = dmTimeoutDefault
+	g.dmMaxPerMinute = dmMaxPerMinuteDefault
+	if v := strings.TrimSpace(os.Getenv("LLM_DM_COOLDOWN_SECONDS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			g.dmCooldownWin = time.Duration(n) * time.Second
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("LLM_DM_TIMEOUT_SECONDS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 {
+			g.dmTimeout = time.Duration(n) * time.Second
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("LLM_DM_MAX_PER_MIN")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			g.dmMaxPerMinute = n
+		}
+	}
+	g.dmEnabled = true
+	if v := strings.ToLower(strings.TrimSpace(os.Getenv("LLM_DM_ENABLED"))); v != "" {
+		switch v {
+		case "0", "false", "no", "off":
+			g.dmEnabled = false
+		default:
+			g.dmEnabled = true
+		}
+	}
+	g.questOfferCooldown = map[string]time.Time{}
+	g.questOfferPending = map[string]*quests.Quest{}
+	g.questOfferSem = make(chan struct{}, questOfferMaxConcurrent)
+	g.npcDialogueCooldown = map[string]time.Time{}
+	g.npcDialogueSem = make(chan struct{}, npcDialogueMaxConcurrent)
 
 	// Initialize NPC instance manager
 	g.NPCManager = NewNPCInstanceManager(facade)
@@ -276,22 +351,39 @@ func (g *Game) Run() {
 				g.fireAggro(fire.key, fire.gen)
 
 			case msg := <-g.onMessageReceived:
-				switch message := msg.(type) {
-				case *m.Message:
-					// attach current character if a user is set
-					g.attachCharacterToMessage(message)
-
-					// only broadcast if global commandprocessor didnt process it
-					if !g.CommandProcessor.Process(g, message) {
-						// check room commands
-						if !g.RoomProcessor.Process(g, message) && !c.BareSkill(g, message) {
-							// generic messages will be converted to plain OutgoingMessages (type message)
-							// and send to the room audience including the origin nickname or charactername
-							g.handleDefaultMessage(message)
-						}
-					}
-				}
+				g.processIncoming(msg)
 			}
 		}
 	}()
+}
+
+// processIncoming dispatches one inbound message on the game-loop goroutine.
+//
+// It must only run on the goroutine that consumes onMessageReceived (Run's
+// loop, or code already executing on it such as handleUserJoined). Sending a
+// message to onMessageReceived from that goroutine is a self-deadlock: the
+// loop is the channel's only consumer, so a full buffer blocks the very
+// goroutine that would drain it (QA B19.3). Synthesized input such as "lc"
+// and "selectcharacter" is therefore dispatched inline instead of round-tripping
+// through the queue — the command still executes exactly once, in the same
+// execution context, immediately after the join that produced it.
+func (g *Game) processIncoming(msg interface{}) {
+	switch message := msg.(type) {
+	case *m.Message:
+		// attach current character if a user is set
+		g.attachCharacterToMessage(message)
+
+		// only broadcast if global commandprocessor didnt process it
+		if !g.CommandProcessor.Process(g, message) {
+			// check room commands
+			if !g.RoomProcessor.Process(g, message) && !c.BareSkill(g, message) {
+				if c.LLMDialogFreeText(g, message) {
+					return
+				}
+				// generic messages will be converted to plain OutgoingMessages (type message)
+				// and send to the room audience including the origin nickname or charactername
+				g.handleDefaultMessage(message)
+			}
+		}
+	}
 }

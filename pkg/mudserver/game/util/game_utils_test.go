@@ -23,6 +23,10 @@ func (stubRoomGame) GetRoomPlayers(string, string) []def.OnlinePlayer { return n
 
 func (stubRoomGame) GetNPCInstanceManager() def.NPCInstanceCtrl { return stubRoomNPCs{} }
 
+// PresenceOf answers the presence read of the shared user. The stub has no
+// presence lock, so it reports an empty state.
+func (stubRoomGame) PresenceOf(*entities.User) def.PresenceState { return def.PresenceState{} }
+
 type stubRoomNPCs struct{ def.NPCInstanceCtrl }
 
 func (stubRoomNPCs) GetInstancesInRoom(string) []*npc.NPC { return nil }

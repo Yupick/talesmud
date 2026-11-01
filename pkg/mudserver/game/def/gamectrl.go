@@ -1,6 +1,7 @@
 package def
 
 import (
+	"context"
 	"time"
 
 	"github.com/talesmud/talesmud/pkg/entities"
@@ -8,6 +9,7 @@ import (
 	"github.com/talesmud/talesmud/pkg/entities/combat"
 	"github.com/talesmud/talesmud/pkg/entities/items"
 	npc "github.com/talesmud/talesmud/pkg/entities/npcs"
+	"github.com/talesmud/talesmud/pkg/entities/quests"
 	"github.com/talesmud/talesmud/pkg/entities/rooms"
 	"github.com/talesmud/talesmud/pkg/instances"
 	"github.com/talesmud/talesmud/pkg/service"
@@ -136,10 +138,134 @@ type RoomInstanceCtrl interface {
 	Expire(now time.Time)
 }
 
+// ContextualQuestRequest describes one dynamically generated quest offer
+// requested from a quest-giver NPC (Phase 6.4 wiring).
+type ContextualQuestRequest struct {
+	CharacterID   string
+	UserID        string
+	PlayerLevel   int
+	ZoneID        string
+	SourceNPCID   string
+	SourceNPCName string
+	Theme         string
+}
+
+// ContextualQuestProviderFunc generates one contextual quest for the request
+// but must not persist it: the game stores the quest when the player accepts.
+// Implementations are expected to degrade to deterministic content when no LLM
+// provider is configured.
+type ContextualQuestProviderFunc func(ctx context.Context, req ContextualQuestRequest) (*quests.Quest, error)
+
+// QuestOfferStatus reports the outcome of scheduling a contextual quest offer.
+type QuestOfferStatus int
+
+const (
+	// QuestOfferScheduled means generation was started (or completed inline).
+	QuestOfferScheduled QuestOfferStatus = iota
+	// QuestOfferDisabled means no provider is installed.
+	QuestOfferDisabled
+	// QuestOfferRateLimited means the character is still on cooldown.
+	QuestOfferRateLimited
+	// QuestOfferBusy means too many generations are already in flight.
+	QuestOfferBusy
+)
+
+// NPC dialogue conversations reuse the authored conversation store with this
+// sentinel DialogID. It lets DialogSelectCommand resolve numeric choices
+// without touching the authored dialog graph.
+const (
+	NPCDialogueDialogID = "__llm__"
+
+	// Conversation context keys for the pending actionable options. They live
+	// in conversations.context (JSON already persisted), so no migration is
+	// needed.
+	NPCDialogueContextOptions        = "LLM_OPTIONS"
+	NPCDialogueContextTemplate       = "LLM_NPC_TEMPLATE"
+	NPCDialogueContextQuestion       = "LLM_QUESTION"
+	NPCDialogueContextReply          = "LLM_REPLY"
+	NPCDialogueContextAuthoredDialog = "LLM_AUTHORED_DIALOG"
+)
+
+// NPCDialogueOption is one suggested follow-up line returned by an LLM-driven
+// NPC. Kind may be "flavor" (a conversational nudge), "end" (a polite
+// conversation closer), or "quest:<questID>" (an available quest action).
+// NodeID is filled by the runtime when a non-quest label maps to an authored
+// dialog node; selecting it then continues that authored node.
+type NPCDialogueOption struct {
+	Label  string `json:"label"`
+	Kind   string `json:"kind"`
+	NodeID string `json:"nodeId,omitempty"`
+}
+
+// NPCDialogueResult is the canonical npc.dialogue payload. It is both the
+// shape the prompt declares and the value the provider hands back to the game.
+// RelationDelta is an optional model hint, always clamped to [-0.05,+0.05].
+type NPCDialogueResult struct {
+	Reply         string              `json:"reply"`
+	Options       []NPCDialogueOption `json:"options,omitempty"`
+	End           bool                `json:"end"`
+	MemoryNotes   []string            `json:"memoryNotes,omitempty"`
+	RelationDelta float64             `json:"relationDelta,omitempty"`
+}
+
+// NPCDialogueRequest describes one free-form question to an LLM-driven NPC
+// (Phase 6.3 runtime cut). Persona/Voice/Temperature come from the NPC's
+// LLMConfig, while Memory is an optional pre-rendered memory block; the
+// installed provider normally refreshes it from NPCMemoriesService.
+type NPCDialogueRequest struct {
+	CharacterID   string
+	UserID        string
+	NPCID         string
+	NPCTemplateID string
+	NPCName       string
+	CharacterName string
+	PlayerLevel   int
+	RoomID        string
+	Question      string
+	Persona       string
+	Voice         string
+	Temperature   float64
+	Memory        string
+	// CooldownSeconds is the per-(character, NPC) game-level cooldown. Zero
+	// falls back to the NPC package default.
+	CooldownSeconds int
+	// Continuation marks a follow-up generated from an actionable LLM option.
+	// It still uses the semaphore but skips the cooldown rejection so a player
+	// can pick a flavor option immediately after the reply.
+	Continuation bool
+}
+
+// NPCDialogueProviderFunc generates one in-character reply. Implementations
+// must run off the command loop and are expected to respect ctx.
+type NPCDialogueProviderFunc func(ctx context.Context, req NPCDialogueRequest) (NPCDialogueResult, error)
+
+// NPCDialogueStatus reports the outcome of scheduling an NPC dialogue
+// generation.
+type NPCDialogueStatus int
+
+const (
+	// NPCDialogueScheduled means generation was started (or completed inline).
+	NPCDialogueScheduled NPCDialogueStatus = iota
+	// NPCDialogueDisabled means no dialogue provider is installed.
+	NPCDialogueDisabled
+	// NPCDialogueRateLimited means the character is still on cooldown for this NPC.
+	NPCDialogueRateLimited
+	// NPCDialogueBusy means too many generations are already in flight.
+	NPCDialogueBusy
+)
+
+// PresenceState is a consistent view of the mutable presence fields of a
+// user: IsOnline, LastSeen and LastCharacter. It is read under the presence
+// lock of the user (Batch 23).
+type PresenceState struct {
+	IsOnline      bool
+	LastSeen      time.Time
+	LastCharacter string
+}
+
 // GameCtrl def
 // interface for commands package to communicate back to game instance
 type GameCtrl interface {
-
 	// Used to pass messages as events inside the mud server, e.g. translate a command into other user messages etc.
 	OnMessageReceived() chan interface{}
 	// used to send replies/messages to users, origin or rooms, or global
@@ -161,6 +287,10 @@ type GameCtrl interface {
 	DisconnectUserSession(userID string)
 	// SetUserSessionCharacter attaches the selected character to a user's live session.
 	SetUserSessionCharacter(user *entities.User, char *characters.Character)
+	// PresenceOf returns the presence fields of a user under the presence
+	// lock. The same user is shared by the websocket goroutine and the game
+	// loop, so the mutable presence fields must be read through it (Batch 23).
+	PresenceOf(user *entities.User) PresenceState
 	// GetOnlinePlayers returns characters attached to live sessions.
 	GetOnlinePlayers() []OnlinePlayer
 	// FindOnlinePlayerByName finds a live player by active character name.
@@ -194,4 +324,35 @@ type GameCtrl interface {
 	NotePlayerEntered(characterID, roomID string)
 	// NoteNPCAppeared schedules same-room aggro-on-sight for players already standing there.
 	NoteNPCAppeared(npcID, roomID string)
+	// Ready check methods for party coordination.
+	StartReadyCheck(partyID string)
+	SetReady(partyID, charID string, ready bool) bool
+	GetReadyCheck(partyID string) (map[string]bool, time.Time, bool)
+	ReadyCheckExpired(partyID string) bool
+	ClearReadyCheck(partyID string)
+	// RequestContextualQuestOffer generates and offers a dynamic quest to the
+	// character. Generation runs off the command loop when the game is running.
+	RequestContextualQuestOffer(req ContextualQuestRequest) QuestOfferStatus
+	// PendingContextualQuest returns the last generated but not yet accepted
+	// quest offer for a character.
+	PendingContextualQuest(characterID string) (*quests.Quest, bool)
+	// ClearPendingContextualQuest drops any pending generated quest offer.
+	ClearPendingContextualQuest(characterID string)
+	// RequestNPCDialogue generates and delivers an in-character reply from an
+	// LLM-driven NPC. Generation runs off the command loop when the game is
+	// running.
+	RequestNPCDialogue(req NPCDialogueRequest) NPCDialogueStatus
+	// NotifyDM posts a DM narration event (non-blocking, may be throttled/silenced).
+	NotifyDM(e DMEvent)
+	// DMNarratorEnabled reports whether a narrator is installed.
+	DMNarratorEnabled() bool
+}
+
+// DMEvent is the typed event bus for the Dungeon Master narrator (Phase 6.5).
+type DMEvent struct {
+	Kind        string            `json:"kind"`
+	RoomID      string            `json:"roomId,omitempty"`
+	CharacterID string            `json:"characterId,omitempty"`
+	UserID      string            `json:"userId,omitempty"`
+	Facts       map[string]string `json:"facts,omitempty"`
 }

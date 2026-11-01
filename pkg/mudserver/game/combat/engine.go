@@ -108,6 +108,11 @@ func (e *Engine) CreateCombatantFromCharacter(char *characters.Character) combat
 		attackPower = 1
 	}
 
+	// DerivedStats.MaxHP/MaxMana mirror char.MaxHitPoints/char.MaxMana verbatim,
+	// so combat shares one derivation path with the client payload without
+	// changing the live pools.
+	derived := characters.DeriveStats(char, nil)
+
 	ref := combat.CombatantRef{
 		ID:          char.Entity.ID,
 		Type:        combat.CombatantTypePlayer,
@@ -118,7 +123,7 @@ func (e *Engine) CreateCombatantFromCharacter(char *characters.Character) combat
 		Level:       char.Level,
 		ClassID:     char.Class.ID,
 		Portrait:    portraits.ForPlayer(char),
-		MaxHP:       char.MaxHitPoints,
+		MaxHP:       derived.MaxHP,
 		CurrentHP:   char.CurrentHitPoints,
 		AttackPower: attackPower,
 		Defense:     defense,
@@ -127,7 +132,7 @@ func (e *Engine) CreateCombatantFromCharacter(char *characters.Character) combat
 		CONMod:      char.GetCONMod(),
 		INTMod:      char.GetINTMod(),
 		WISMod:      char.GetWISMod(),
-		MaxMana:     char.MaxMana,
+		MaxMana:     derived.MaxMana,
 		CurrentMana: char.CurrentMana,
 		ManaRegen:   char.CalculateManaRegen(),
 	}

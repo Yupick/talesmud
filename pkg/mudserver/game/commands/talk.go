@@ -9,9 +9,11 @@ import (
 	"github.com/talesmud/talesmud/pkg/entities/characters"
 	"github.com/talesmud/talesmud/pkg/entities/conversations"
 	"github.com/talesmud/talesmud/pkg/entities/dialogs"
+	npc "github.com/talesmud/talesmud/pkg/entities/npcs"
 	"github.com/talesmud/talesmud/pkg/entities/quests"
 	"github.com/talesmud/talesmud/pkg/mudserver/game/def"
 	"github.com/talesmud/talesmud/pkg/mudserver/game/messages"
+	"github.com/talesmud/talesmud/pkg/service"
 )
 
 const questOnlyDialogID = "__quest_options__"
@@ -56,12 +58,30 @@ func (command *TalkCommand) Execute(game def.GameCtrl, message *messages.Message
 		return true
 	}
 
-	npc := npcManager.FindInstanceByNameInRoom(message.Character.CurrentRoomID, npcName)
-	if npc == nil {
+	target := npcManager.FindInstanceByNameInRoom(message.Character.CurrentRoomID, npcName)
+	if target == nil {
 		game.SendMessage() <- message.Reply("There is no one named '" + npcName + "' here.")
 		return true
 	}
 
+	return talkToNPC(game, message, target)
+}
+
+// talkToNPC runs the authored dialog flow for an already resolved NPC. It is
+// shared with the ask command so an NPC without LLM dialogue degrades to the
+// exact same authored experience.
+func talkToNPC(game def.GameCtrl, message *messages.Message, npc *npc.NPC) bool {
+	return talkToNPCAt(game, message, npc, "main")
+}
+
+// talkToNPCAt runs the authored dialog flow starting at startNode. It is used
+// when an LLM option maps to an authored node; an empty startNode falls back to
+// the dialog's "main" entry point.
+func talkToNPCAt(game def.GameCtrl, message *messages.Message, npc *npc.NPC, startNode string) bool {
+	startNode = strings.TrimSpace(startNode)
+	if startNode == "" {
+		startNode = "main"
+	}
 	engageNPC(game, message, npc.ID, "")
 	// Track quest progress for talking to NPC (deliver objectives)
 	NotifyQuestTalkToNPC(game, message.Character.ID, message.FromUser.ID, npc)
@@ -98,6 +118,19 @@ func (command *TalkCommand) Execute(game def.GameCtrl, message *messages.Message
 			sendQuestOnlyDialog(game, message, npc.Name, conv, questOptions)
 			return true
 		}
+		if npc.LLMEnabled() {
+			switch game.RequestNPCDialogue(buildNPCDialogueRequest(message, npc, "", false)) {
+			case def.NPCDialogueScheduled:
+				game.SendMessage() <- message.Reply("You greet " + npc.Name + ".")
+			case def.NPCDialogueRateLimited:
+				game.SendMessage() <- message.Reply(npc.Name + " is still thinking about your last question. Try again shortly.")
+			case def.NPCDialogueBusy:
+				game.SendMessage() <- message.Reply(npc.Name + " is busy with another question. Try again shortly.")
+			default:
+				game.SendMessage() <- message.Reply(npc.Name + " doesn't seem to want to talk.")
+			}
+			return true
+		}
 		game.SendMessage() <- message.Reply(npc.Name + " doesn't seem to want to talk.")
 		return true
 	}
@@ -123,10 +156,10 @@ func (command *TalkCommand) Execute(game def.GameCtrl, message *messages.Message
 		return true
 	}
 
-	// Talking again starts the dialog over at its start node instead of resuming
-	// wherever the last conversation stopped.
+	// Talking again starts the dialog at the requested entry point (usually its
+	// start node) instead of resuming wherever the last conversation stopped.
 	conv.DialogID = npc.DialogID
-	conv.CurrentNodeID = "main"
+	conv.CurrentNodeID = startNode
 	// Set context for template rendering
 	conv.SetContext("PLAYER", message.Character.Name)
 	conv.SetContext("NPC", npc.Name)
@@ -153,31 +186,44 @@ type questDialogOption struct {
 // getQuestDialogOptions checks for quest-related dialog options for an NPC.
 // Only shows quests whose prerequisites are met.
 func getQuestDialogOptions(game def.GameCtrl, characterID, npcTemplateID, npcInstanceID string) []questDialogOption {
+	if game == nil {
+		return nil
+	}
+	return questDialogOptionsForFacade(game.GetFacade(), characterID, npcTemplateID, npcInstanceID)
+}
+
+func questDialogOptionsForFacade(facade service.Facade, characterID, npcTemplateID, npcInstanceID string) []questDialogOption {
 	var options []questDialogOption
+	if facade == nil || facade.QuestsService() == nil {
+		return options
+	}
 
 	// Find quests offered by this NPC (check both template and instance ID)
-	npcQuests, err := game.GetFacade().QuestsService().FindBySourceNPC(npcTemplateID)
+	npcQuests, err := facade.QuestsService().FindBySourceNPC(npcTemplateID)
 	if err != nil {
 		return options
 	}
 
 	// Also check instance ID if different
 	if npcInstanceID != npcTemplateID {
-		instanceQuests, err := game.GetFacade().QuestsService().FindBySourceNPC(npcInstanceID)
+		instanceQuests, err := facade.QuestsService().FindBySourceNPC(npcInstanceID)
 		if err == nil {
 			npcQuests = append(npcQuests, instanceQuests...)
 		}
 	}
 
 	// Load character for level check
-	char, _ := game.GetFacade().CharactersService().FindByID(characterID)
+	var char *characters.Character
+	if facade.CharactersService() != nil {
+		char, _ = facade.CharactersService().FindByID(characterID)
+	}
 
 	for _, quest := range npcQuests {
-		progress, _ := game.GetFacade().QuestsService().GetProgress(characterID, quest.ID)
+		progress, _ := facade.QuestsService().GetProgress(characterID, quest.ID)
 
 		if progress == nil || progress.Status == quests.QuestStatusAbandoned {
 			// Check prerequisites before offering
-			if !questPrereqsMet(game, characterID, quest, char) {
+			if !questPrereqsMet(facade, characterID, quest, char) {
 				continue
 			}
 
@@ -197,13 +243,13 @@ func getQuestDialogOptions(game def.GameCtrl, characterID, npcTemplateID, npcIns
 	for _, option := range options {
 		seen[option.questID] = true
 	}
-	progressList, err := game.GetFacade().QuestsService().GetQuestLog(characterID)
+	progressList, err := facade.QuestsService().GetQuestLog(characterID)
 	if err == nil {
 		for _, progress := range progressList {
 			if progress == nil || progress.Status != quests.QuestStatusActive || seen[progress.QuestID] {
 				continue
 			}
-			quest, qerr := game.GetFacade().QuestsService().FindByID(progress.QuestID)
+			quest, qerr := facade.QuestsService().FindByID(progress.QuestID)
 			if qerr != nil || quest == nil || quest.AllowsAnywhereTurnIn() {
 				continue
 			}
@@ -252,7 +298,7 @@ func activeQuestDialogOption(quest *quests.Quest, progress *quests.QuestProgress
 }
 
 // questPrereqsMet checks if a character meets the prerequisites for a quest
-func questPrereqsMet(game def.GameCtrl, characterID string, quest *quests.Quest, char *characters.Character) bool {
+func questPrereqsMet(facade service.Facade, characterID string, quest *quests.Quest, char *characters.Character) bool {
 	// Check level requirement
 	if quest.RequiredLevel > 0 && char != nil && char.Level < quest.RequiredLevel {
 		return false
@@ -260,13 +306,27 @@ func questPrereqsMet(game def.GameCtrl, characterID string, quest *quests.Quest,
 
 	// Check required quests are completed
 	for _, reqID := range quest.RequiredQuestIDs {
-		reqProgress, _ := game.GetFacade().QuestsService().GetProgress(characterID, reqID)
+		reqProgress, _ := facade.QuestsService().GetProgress(characterID, reqID)
 		if reqProgress == nil || reqProgress.Status != quests.QuestStatusCompleted {
 			return false
 		}
 	}
 
 	return true
+}
+
+// AvailableQuestPromptContext returns the currently actionable quest choices
+// for an NPC. The same resolver backs talk menus so model-generated quest IDs
+// can only refer to choices the player could select right now.
+func AvailableQuestPromptContext(facade service.Facade, characterID, npcTemplateID, npcInstanceID string) (string, map[string]string) {
+	options := questDialogOptionsForFacade(facade, characterID, npcTemplateID, npcInstanceID)
+	ids := make(map[string]string, len(options))
+	lines := make([]string, 0, len(options))
+	for _, option := range options {
+		ids[option.questID] = option.action
+		lines = append(lines, fmt.Sprintf("ID: %s | Nombre: %s | Acción: %s", option.questID, option.questName, option.action))
+	}
+	return strings.Join(lines, "\n"), ids
 }
 
 // sendQuestOnlyDialog sends a dialog with only quest options (for NPCs without dialogs)

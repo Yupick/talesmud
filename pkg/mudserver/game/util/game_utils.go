@@ -21,7 +21,7 @@ func CreateRoomDescription(room *rooms.Room, user *entities.User, game def.GameC
 
 	// Characters - only show online players
 	if room != nil {
-		onlinePlayers := game.GetRoomPlayers(room.ID, user.LastCharacter)
+		onlinePlayers := game.GetRoomPlayers(room.ID, game.PresenceOf(user).LastCharacter)
 		onlineChars := make([]string, 0, len(onlinePlayers))
 		for _, player := range onlinePlayers {
 			name := player.CharacterName
@@ -122,7 +122,7 @@ func GetRoomCharacters(room *rooms.Room, user *entities.User, game def.GameCtrl)
 		return []RoomCharacter{}
 	}
 
-	players := game.GetRoomPlayers(room.ID, user.LastCharacter)
+	players := game.GetRoomPlayers(room.ID, game.PresenceOf(user).LastCharacter)
 	result := make([]RoomCharacter, 0, len(players))
 	for _, player := range players {
 		result = append(result, RoomCharacter{

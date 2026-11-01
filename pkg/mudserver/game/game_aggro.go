@@ -568,6 +568,14 @@ func (c *CombatController) BeginEngagement(roomID string, player *characters.Cha
 		Message:    roomLine,
 	}
 	c.nudgePartyAssist(player, roomID, target.Name, names)
+	c.game.TriggerDMNarration(DMNarrationRequest{
+		Event:     "combatStart",
+		RoomID:    roomID,
+		RoomName:  c.game.dmRoomName(roomID),
+		NPCName:   target.Name,
+		Round:     instance.Round,
+		PartySize: c.game.dmPartySize(player.ID, len(instance.Players)),
+	})
 	return instance
 }
 

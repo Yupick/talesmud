@@ -70,10 +70,19 @@ type MessageResponse struct {
 	Username string      `json:"username"`
 	Message  string      `json:"message"`
 
+	// Channel tags global chat lines (general, trade, lfg, help, roleplay,
+	// admin) so the client can route them to the right chat tab. Empty on
+	// every non-channel message.
+	Channel string `json:"channel,omitempty"`
+
 	// Enemy-hook room lines. Omitted on every other message.
 	Style  string `json:"style,omitempty"`  // "combatEvent"
 	Hook   string `json:"hook,omitempty"`   // onAggro | onLowHealth | onDeath | onFlee
 	Source string `json:"source,omitempty"` // display name of the NPC whose hook ran
+
+	// RelationDelta is the bounded NPC/player sentiment change for dialogue.
+	// Omitted on messages that do not report a relationship update.
+	RelationDelta float64 `json:"relationDelta,omitempty"`
 
 	// NoticeGen is the command that produced this line. Zero is not command output.
 	NoticeGen uint64 `json:"-"`
@@ -333,6 +342,7 @@ func NewCreateCharacterMessage(user string) MessageResponse {
 type DialogOption struct {
 	Index int    `json:"index"` // 1-based index for player input
 	Text  string `json:"text"`  // The option text to display
+	Kind  string `json:"kind,omitempty"`
 }
 
 // DialogMessage represents a dialog message with NPC text and player options
@@ -342,6 +352,7 @@ type DialogMessage struct {
 	NPCText        string         `json:"npcText"`
 	Options        []DialogOption `json:"options"`
 	ConversationID string         `json:"conversationID"`
+	FreeText       bool           `json:"freeText,omitempty"`
 }
 
 // NewDialogMessage creates a new dialog message for the player
@@ -412,6 +423,27 @@ type CharacterUpdateMessage struct {
 	AttackMod    int32  `json:"attackMod"`
 	Defense      int32  `json:"defense"`
 	ManaRegen    int32  `json:"manaRegen,omitempty"`
+
+	// Derived stats from pkg/entities/characters.DeriveStats. MaxHP/MaxMana
+	// already travel as maxHitPoints/maxMana above; these are the new
+	// read-only projections. CritChance is a percent.
+	Stamina    int32   `json:"stamina"`
+	Initiative int     `json:"initiative"`
+	Resist     int     `json:"resist"`
+	CritChance float64 `json:"critChance"`
+
+	// Talent state and projections (Phase 2.4). Zero for a legacy character.
+	Talents            characters.CharacterTalents `json:"talents"`
+	DamageBonus        float64                     `json:"damageBonus,omitempty"`
+	SpellDamageBonus   float64                     `json:"spellDamageBonus,omitempty"`
+	DamageReduction    float64                     `json:"damageReduction,omitempty"`
+	MaxHPBonusPercent  float64                     `json:"maxHpBonusPercent,omitempty"`
+	BlockChance        float64                     `json:"blockChance,omitempty"`
+	StaminaRegen       int32                       `json:"staminaRegen,omitempty"`
+	SpellCooldownBonus float64                     `json:"spellCooldownBonus,omitempty"`
+	HealBonus          float64                     `json:"healBonus,omitempty"`
+	Evasion            float64                     `json:"evasion,omitempty"`
+	PotionBonus        float64                     `json:"potionBonus,omitempty"`
 }
 
 // NewCharacterUpdateMessage creates a character update from the current character state
@@ -428,6 +460,10 @@ func NewCharacterUpdateMessage(userID string, ch *characters.Character) *Charact
 		attackPower = 1
 	}
 
+	// DerivedStats reuses the stored pools, so maxHitPoints/maxMana stay
+	// byte-for-byte what combat already snapshots.
+	derived := characters.DeriveStats(ch, nil)
+
 	equipped := ch.EquippedSkills
 	if equipped == nil {
 		equipped = []string{}
@@ -440,9 +476,9 @@ func NewCharacterUpdateMessage(userID string, ch *characters.Character) *Charact
 			Type:       MessageTypeCharacterUpdate,
 		},
 		CurrentHitPoints:       ch.CurrentHitPoints,
-		MaxHitPoints:           ch.MaxHitPoints,
+		MaxHitPoints:           derived.MaxHP,
 		CurrentMana:            ch.CurrentMana,
-		MaxMana:                ch.MaxMana,
+		MaxMana:                derived.MaxMana,
 		XP:                     ch.XP,
 		XPForNextLevel:         leveling.GetXPRequired(ch.Level + 1),
 		Level:                  ch.Level,
@@ -460,6 +496,21 @@ func NewCharacterUpdateMessage(userID string, ch *characters.Character) *Charact
 		AttackMod:              atkMod,
 		Defense:                ch.GetArmorDefense(),
 		ManaRegen:              ch.CalculateManaRegen(),
+		Stamina:                derived.Stamina,
+		Initiative:             derived.Initiative,
+		Resist:                 derived.Resist,
+		CritChance:             derived.CritChance,
+		Talents:                ch.Talents,
+		DamageBonus:            derived.DamageBonus,
+		SpellDamageBonus:       derived.SpellDamageBonus,
+		DamageReduction:        derived.DamageReduction,
+		MaxHPBonusPercent:      derived.MaxHPBonusPercent,
+		BlockChance:            derived.BlockChance,
+		StaminaRegen:           derived.StaminaRegen,
+		SpellCooldownBonus:     derived.SpellCooldownBonus,
+		HealBonus:              derived.HealBonus,
+		Evasion:                derived.Evasion,
+		PotionBonus:            derived.PotionBonus,
 	}
 }
 
@@ -655,6 +706,8 @@ type LevelUpMessage struct {
 	AttributeGains         map[string]int32 `json:"attributeGains,omitempty"`
 	AttributePointsGained  int32            `json:"attributePointsGained,omitempty"`
 	UnspentAttributePoints int32            `json:"unspentAttributePoints,omitempty"`
+	TalentPointsGained     int32            `json:"talentPointsGained,omitempty"`
+	UnspentTalentPoints    int32            `json:"unspentTalentPoints,omitempty"`
 	MaxHitPoints           int32            `json:"maxHitPoints,omitempty"`
 	MaxMana                int32            `json:"maxMana,omitempty"`
 }
@@ -683,6 +736,8 @@ func NewLevelUpMessage(userID string, result *leveling.LevelUpResult) *LevelUpMe
 		AttributeGains:         gains,
 		AttributePointsGained:  result.AttributePointsGained,
 		UnspentAttributePoints: result.UnspentAttributePoints,
+		TalentPointsGained:     result.TalentPointsGained,
+		UnspentTalentPoints:    result.UnspentTalentPoints,
 		MaxHitPoints:           result.MaxHitPoints,
 		MaxMana:                result.MaxMana,
 	}
@@ -927,7 +982,8 @@ type PartyMessage struct {
 	MaxMembers int                `json:"maxMembers,omitempty"`
 	Members    []PartyMemberEntry `json:"members"`
 	// Following is true when this recipient is trailing the party leader.
-	Following bool `json:"following,omitempty"`
+	Following bool   `json:"following,omitempty"`
+	LootRule  string `json:"lootRule,omitempty"`
 }
 
 // NewPartyMessage creates a structured party payload for the client overlay.
@@ -964,6 +1020,9 @@ func (m *PartyMessage) AttachPartyMeta(party *e.Party) *PartyMessage {
 		}
 		if party.ID != "" {
 			m.PartyID = party.ID
+		}
+		if party.LootRule != "" {
+			m.LootRule = party.LootRule
 		}
 	}
 	return m

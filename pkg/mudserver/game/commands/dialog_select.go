@@ -43,6 +43,12 @@ func DialogSelectCommand(room *rooms.Room, game def.GameCtrl, message *messages.
 	// Find most recent active conversation (within timeout)
 	var activeConv *conversations.Conversation
 	for _, conv := range convs {
+		// A closed conversation has no DialogID. Do not let an NPC session that
+		// is still open keep it selectable: an async LLM reply or a flavor
+		// follow-up can leave the session open briefly after the choices clear.
+		if strings.TrimSpace(conv.DialogID) == "" {
+			continue
+		}
 		if time.Since(conv.LastInteracted) < conversationTimeout || npcSessionOpen(game, message.Character.ID, conv.TargetID, "dialog") {
 			if activeConv == nil || conv.LastInteracted.After(activeConv.LastInteracted) {
 				activeConv = conv
@@ -55,7 +61,7 @@ func DialogSelectCommand(room *rooms.Room, game def.GameCtrl, message *messages.
 	}
 
 	if n := game.GetNPCInstanceManager().GetInstance(activeConv.TargetID); n != nil {
-		if n.CurrentRoomID != message.Character.CurrentRoomID {
+		if n.IsDead || n.State == "dead" || (n.MaxHitPoints > 0 && n.CurrentHitPoints <= 0) || n.CurrentRoomID != message.Character.CurrentRoomID {
 			closeNPCSession(game, message, "dialog")
 			game.GetFacade().ConversationsService().ResetConversation(activeConv)
 			return false
@@ -64,6 +70,9 @@ func DialogSelectCommand(room *rooms.Room, game def.GameCtrl, message *messages.
 	}
 	if isQuestOnlyConversation(activeConv) {
 		return handleQuestOnlyDialogSelection(game, message, activeConv, optionIndex)
+	}
+	if activeConv.DialogID == def.NPCDialogueDialogID {
+		return handleLLMDialogSelection(game, message, activeConv, optionIndex)
 	}
 
 	var dialog *dialogs.Dialog
@@ -414,6 +423,7 @@ func handleQuestAction(game def.GameCtrl, message *messages.Message, selectedOpt
 
 		rewardMsg := buildQuestRewardMessage(quest, grantedItems)
 		game.SendMessage() <- questCompletedUpdate(char.BelongsUserID, quest.ID, quest.Name, rewardMsg)
+		notifyQuestCompletedDM(game, char, quest)
 
 		// Get updated character for stats update
 		updatedChar, _ := game.GetFacade().CharactersService().FindByID(char.ID)
@@ -507,6 +517,10 @@ func refreshActiveDialog(game def.GameCtrl, message *messages.Message, npcName s
 	}
 	if isQuestOnlyConversation(activeConv) {
 		sendQuestOnlyDialog(game, message, npcName, activeConv, questOptions)
+		return
+	}
+	if activeConv.DialogID == def.NPCDialogueDialogID {
+		refreshLLMDialog(game, message, npcName, activeConv)
 		return
 	}
 

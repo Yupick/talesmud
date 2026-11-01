@@ -13,18 +13,27 @@ import (
 	"github.com/talesmud/talesmud/pkg/ruleset"
 )
 
+type readyCheckState struct {
+	ready    map[string]bool
+	started  time.Time
+	timeout  time.Duration
+	finished bool
+}
+
 type sessionRegistry struct {
-	mu      sync.RWMutex
-	players map[string]def.OnlinePlayer
-	invites map[string]def.PartyInvite
-	follows map[string]string // follower character ID -> leader character ID
+	mu          sync.RWMutex
+	players     map[string]def.OnlinePlayer
+	invites     map[string]def.PartyInvite
+	follows     map[string]string // follower character ID -> leader character ID
+	readyChecks map[string]*readyCheckState
 }
 
 func newSessionRegistry() *sessionRegistry {
 	return &sessionRegistry{
-		players: make(map[string]def.OnlinePlayer),
-		invites: make(map[string]def.PartyInvite),
-		follows: make(map[string]string),
+		players:     make(map[string]def.OnlinePlayer),
+		invites:     make(map[string]def.PartyInvite),
+		follows:     make(map[string]string),
+		readyChecks: make(map[string]*readyCheckState),
 	}
 }
 
@@ -202,11 +211,21 @@ func (g *Game) ConnectUserSession(user *entities.User) {
 	if user == nil {
 		return
 	}
-	user.IsOnline = true
-	user.LastSeen = time.Now()
-	if user.RefID != "" {
-		_ = g.Facade.UsersService().Update(user.RefID, user)
-	}
+	// The presence fields are written under the presence lock: this runs on
+	// the game loop while the websocket goroutine may be attaching or
+	// closing the same session (Batch 23).
+	// Persist only the offline -> online transition. This runs on every input
+	// line, so writing each time cost two synchronous SQLite round trips per
+	// message without any state change to record (QA B19.6-1). The online
+	// flag is already written by the session attach, and the offline flag by
+	// the disconnect paths; the guard here keeps callers that attach outside
+	// attachSession correct.
+	g.ApplyPresence(user, func(u *entities.User) bool {
+		wasOnline := u.IsOnline
+		u.IsOnline = true
+		u.LastSeen = time.Now()
+		return u.RefID != "" && !wasOnline
+	})
 	g.Sessions.connect(user)
 }
 
@@ -216,11 +235,13 @@ func (g *Game) DisconnectUserSession(userID string) {
 	}
 	departed, _ := g.Sessions.get(userID)
 	if user, err := g.Facade.UsersService().FindByID(userID); err == nil && user != nil {
-		user.IsOnline = false
-		user.LastSeen = time.Now()
-		if user.RefID != "" {
-			_ = g.Facade.UsersService().Update(user.RefID, user)
-		}
+		// Same presence lock as the live session: the offline write must not
+		// interleave with an online write of the same user (Batch 23).
+		g.ApplyPresence(user, func(u *entities.User) bool {
+			u.IsOnline = false
+			u.LastSeen = time.Now()
+			return u.RefID != ""
+		})
 	}
 	if charID := g.Sessions.characterID(userID); charID != "" {
 		g.cancelAggroForPlayer(charID)
@@ -258,12 +279,14 @@ func (g *Game) SetUserSessionCharacter(user *entities.User, char *characters.Cha
 		g.NPCManager.CloseNPCSession(previous, "")
 	}
 	g.NPCManager.releaseNPCSessionsOutsideRoom(char.ID, char.CurrentRoomID)
-	user.LastCharacter = char.ID
-	user.IsOnline = true
-	user.LastSeen = time.Now()
-	if user.RefID != "" {
-		_ = g.Facade.UsersService().Update(user.RefID, user)
-	}
+	// LastCharacter travels with the presence fields: it is written by the
+	// game loop and read by the websocket goroutine (Batch 23).
+	g.ApplyPresence(user, func(u *entities.User) bool {
+		u.LastCharacter = char.ID
+		u.IsOnline = true
+		u.LastSeen = time.Now()
+		return u.RefID != ""
+	})
 	g.Sessions.setCharacter(user, char)
 	g.notifyFriendsOfPresence(char.ID, char.Name, true)
 }

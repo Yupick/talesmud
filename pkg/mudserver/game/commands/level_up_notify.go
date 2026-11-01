@@ -16,4 +16,5 @@ func notifyLevelUp(game def.GameCtrl, userID string, levelUp *leveling.LevelUpRe
 	if msg := messages.NewLevelUpMessage(userID, levelUp); msg != nil {
 		game.SendMessage() <- msg
 	}
+	notifyLevelUpDM(game, userID, levelUp)
 }

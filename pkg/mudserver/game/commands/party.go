@@ -52,6 +52,14 @@ func (command *PartyCommand) Execute(game def.GameCtrl, message *messages.Messag
 		command.followLeader(game, message)
 	case "unfollow":
 		command.unfollowLeader(game, message)
+	case "loot":
+		command.handleLoot(game, message, args)
+	case "readycheck":
+		command.handleReadyCheck(game, message, args)
+	case "ready":
+		command.handleReady(game, message, true)
+	case "notready":
+		command.handleReady(game, message, false)
 	default:
 		command.chat(game, message, strings.TrimSpace(strings.TrimPrefix(message.Data, args[0]+" ")), "party <message>")
 	}
@@ -59,7 +67,7 @@ func (command *PartyCommand) Execute(game def.GameCtrl, message *messages.Messag
 }
 
 func partyUsage() string {
-	return "Party commands: party create, party invite <player>, party accept, party decline, party leave, party kick <player>, party promote <player>, party list, party follow, party unfollow, party say <message>"
+	return "Party commands: party create, party invite <player>, party accept, party decline, party leave, party kick <player>, party promote <player>, party list, party follow, party unfollow, party say <message>, party loot [rule], party readycheck, party ready, party notready"
 }
 
 func (command *PartyCommand) createParty(game def.GameCtrl, message *messages.Message) {

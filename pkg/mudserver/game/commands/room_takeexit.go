@@ -107,6 +107,21 @@ func TakeExit(exit string) RoomCommand {
 				// Track quest progress for room entry
 				NotifyQuestRoomEnter(game, characterID, message.FromUser.ID, next)
 
+				// Dungeon Master: only narrate arrivals into a new area. The
+				// per-room cooldown in the narrator keeps ordinary exits quiet.
+				if strings.TrimSpace(room.Area) != strings.TrimSpace(next.Area) {
+					game.NotifyDM(def.DMEvent{
+						Kind:        "roomEnter",
+						RoomID:      next.ID,
+						CharacterID: characterID,
+						UserID:      message.FromUser.ID,
+						Facts: map[string]string{
+							"roomName": next.Name,
+							"area":     next.Area,
+						},
+					})
+				}
+
 				// TODO: exploration XP disabled for now, re-enable when client XP display is updated
 				// GrantExplorationXP(game, message.Character, message.FromUser.ID, next)
 

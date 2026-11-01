@@ -33,20 +33,25 @@ func (game *Game) handleDefaultMessage(message *messages.Message) {
 
 func (game *Game) handleUserQuit(user *entities.User) {
 
+	// The active character is read through the presence lock: the websocket
+	// goroutine can select a character while the game loop quits the user
+	// (Batch 23).
+	lastCharacter := game.PresenceOf(user).LastCharacter
+
 	log.WithFields(log.Fields{
 		"userId":      user.ID,
 		"nickname":    user.Nickname,
-		"characterId": user.LastCharacter,
+		"characterId": lastCharacter,
 	}).Info("UserQuit")
 
 	game.DisconnectUserSession(user.ID)
 
-	if user.LastCharacter == "" {
+	if lastCharacter == "" {
 		return
 	}
-	character, err := game.Facade.CharactersService().FindByID(user.LastCharacter)
+	character, err := game.Facade.CharactersService().FindByID(lastCharacter)
 	if err != nil || character == nil {
-		log.WithField("characterID", user.LastCharacter).WithError(err).Warn("Could not load character during user quit")
+		log.WithField("characterID", lastCharacter).WithError(err).Warn("Could not load character during user quit")
 		return
 	}
 	room, err := game.Facade.RoomsService().FindByID(character.CurrentRoomID)
@@ -71,6 +76,10 @@ func (game *Game) handleUserQuit(user *entities.User) {
 }
 
 // Find the matching character for the user where the message originated
+//
+// The active character is read through the presence lock: LastCharacter is
+// written by the game loop and read here, which can be the websocket
+// goroutine (Batch 23).
 func (game *Game) attachCharacterToMessage(msg *messages.Message) {
 
 	if msg.Character != nil {
@@ -78,11 +87,15 @@ func (game *Game) attachCharacterToMessage(msg *messages.Message) {
 	}
 
 	// could be a processed message that got the user removed
-	if msg.FromUser == nil || msg.FromUser.LastCharacter == "" {
+	if msg.FromUser == nil {
+		return
+	}
+	lastCharacter := game.PresenceOf(msg.FromUser).LastCharacter
+	if lastCharacter == "" {
 		return
 	}
 
-	if character, err := game.Facade.CharactersService().FindByID(msg.FromUser.LastCharacter); err == nil {
+	if character, err := game.Facade.CharactersService().FindByID(lastCharacter); err == nil {
 		character.NormalizeAttributeShorts()
 		msg.Character = character
 	} else {
@@ -91,26 +104,34 @@ func (game *Game) attachCharacterToMessage(msg *messages.Message) {
 }
 
 func (game *Game) handleUserJoined(user *entities.User) {
+	// The active character is read through the presence lock: the websocket
+	// goroutine can select a character while the game loop joins the user
+	// (Batch 23).
+	presence := game.PresenceOf(user)
+
 	log.WithFields(log.Fields{
 		"userId":      user.ID,
 		"nickname":    user.Nickname,
-		"characterId": user.LastCharacter,
+		"characterId": presence.LastCharacter,
 	}).Info("UserJoined")
 	game.ConnectUserSession(user)
 
 	// get active character for user
-	if user.LastCharacter == "" {
+	if presence.LastCharacter == "" {
 
 		if chars, err := game.Facade.CharactersService().FindAllForUser(user.ID); err == nil {
 
 			// take first character for now
 			// TODO: let the player choose?
 			if len(chars) > 0 {
-				user.LastCharacter = chars[0].ID
-				user.LastSeen = time.Now()
-				user.IsOnline = true
 				//TODO: send updates via message queue?
-				game.Facade.UsersService().Update(user.RefID, user)
+				game.ApplyPresence(user, func(u *entities.User) bool {
+					u.LastCharacter = chars[0].ID
+					u.LastSeen = time.Now()
+					u.IsOnline = true
+					return true
+				})
+				presence = game.PresenceOf(user)
 			}
 		} else {
 			// player has no character yet, respnd with createCharacter Message
@@ -119,17 +140,24 @@ func (game *Game) handleUserJoined(user *entities.User) {
 		}
 	}
 
-	if character, err := game.Facade.CharactersService().FindByID(user.LastCharacter); err != nil {
+	if character, err := game.Facade.CharactersService().FindByID(presence.LastCharacter); err != nil {
 
 		log.WithField("user", user.Name).Error("Could not select character for user")
 		// player character may be broken, let the user create a new one
 		//game.SendMessage(messages.NewCreateCharacterMessage(user.ID))
 		// send list characters command
-		game.onMessageReceived <- messages.NewMessage(user, "lc")
+		//
+		// Dispatched inline instead of game.onMessageReceived <- ...: this
+		// handler runs on the game loop, which is the only consumer of that
+		// channel. Sending to it from here filled the buffer until the loop
+		// blocked on a send only it could service (permanent wedge under
+		// >=200 concurrent logins, QA B19.3). Inline never drops the message —
+		// "lc" is the login fallback for a user without a usable character.
+		game.processIncoming(messages.NewMessage(user, "lc"))
 	} else {
 
-		// send message as userwould do it
-		selectCharacterMsg := messages.NewMessage(user, "selectcharacter "+character.Name)
-		game.OnMessageReceived() <- selectCharacterMsg
+		// select the active character inline, for the same self-deadlock
+		// reason as the "lc" branch above (QA B19.3, game_handlers.go:133).
+		game.processIncoming(messages.NewMessage(user, "selectcharacter "+character.Name))
 	}
 }

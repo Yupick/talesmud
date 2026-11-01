@@ -38,7 +38,7 @@ func (command *SelectCharacterCommand) Execute(game def.GameCtrl, message *messa
 	// A character in a fight stays the active one until the fight ends.
 	// Switching away left the old fight running on auto-attack while its
 	// turn prompts, status lines and defeat went to the same user session.
-	if current := activeCharacterID(message); current != "" {
+	if current := activeCharacterID(game, message); current != "" {
 		if engine := game.GetCombatEngine(); engine != nil && engine.IsPlayerInCombat(current) {
 			if name := activeCharacterName(message); name == "" || name != characterName {
 				game.SendMessage() <- message.Reply("You can't switch characters during a fight. Flee or finish the fight first.")
@@ -135,8 +135,12 @@ func handleCharacterSelected(game def.GameCtrl, user *entities.User, character *
 	}
 
 	// handle Character deselection
-	if user.LastCharacter != "" && user.LastCharacter != character.ID {
-		if character, err := game.GetFacade().CharactersService().FindByID(user.LastCharacter); err == nil {
+	// The active character is read through the presence lock: the websocket
+	// goroutine can select a character while the game loop does the same
+	// (Batch 23).
+	lastCharacter := game.PresenceOf(user).LastCharacter
+	if lastCharacter != "" && lastCharacter != character.ID {
+		if character, err := game.GetFacade().CharactersService().FindByID(lastCharacter); err == nil {
 			if room, err := game.GetFacade().RoomsService().FindByID(character.CurrentRoomID); err == nil {
 
 				// remove character from current room
@@ -299,7 +303,7 @@ func sendQuestLogToPlayer(game def.GameCtrl, userID, characterID string) {
 }
 
 // activeCharacterID is the character this session is playing right now.
-func activeCharacterID(message *messages.Message) string {
+func activeCharacterID(game def.GameCtrl, message *messages.Message) string {
 	if message == nil {
 		return ""
 	}
@@ -307,7 +311,7 @@ func activeCharacterID(message *messages.Message) string {
 		return message.Character.ID
 	}
 	if message.FromUser != nil {
-		return message.FromUser.LastCharacter
+		return game.PresenceOf(message.FromUser).LastCharacter
 	}
 	return ""
 }
