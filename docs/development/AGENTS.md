@@ -9,7 +9,8 @@
 
 ## Build, Test, and Development Commands
 - `make build`: builds both frontends, copies dist assets into `pkg/`, and compiles `bin/tales`.
-- `make build-frontend` / `make build-mud-client` / `make build-backend`: build each target individually.
+- Go targets compile **by package**, never a loose file: `go build -buildvcs=false -o bin/tales ./cmd/tales` (and `go run ./cmd/tales`); building `cmd/tales/main.go` alone fails since Batch 20 added `cmd/tales/pprof.go`. `-buildvcs=false` is required where `.git` is unavailable (Docker bind mounts, containers).
+- `make build-frontend` / `make build-mud-client` / `make build-backend` / `make build-dialogs-sandbox`: build each target individually.
 - `make run-server`: run the Go server locally.
 - `make run-frontend`: start the admin UI (`public/app/`) via Vite.
 - `make run-mud-client`: start the game client in watch mode.

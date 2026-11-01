@@ -2,7 +2,9 @@
 
 **Purpose**: This document catalogs ALL core systems, data structures, features, and APIs available in TalesMUD. It is designed to provide complete context for AI agents reworking game content to leverage the latest capabilities.
 
-**Last Updated**: 2026-10-12
+**Last Updated**: 2026-11-01 (Batch 29 — FASE 6.3 mecanismos B/C, opciones `quest:<id>` validadas, contrato de texto libre y prompt `npc.dialogue` v1.0.3; Batch 28 — conexión de `relationDelta` a mensajes; Batch 27 — opciones LLM accionables, relaciones dinámicas y feedback; Batch 26 — personalidad/memoria/config; Batch 25 — `ask` + `npc_memories`; Batch 24 — DM narrator modo A; batches anteriores 15–23)
+
+El detalle histórico de Batches 25–27 que sigue documenta el estado de cada batch en su fecha. El estado vigente de FASE 6.3, incluido el cierre B/C, está en la sección “NPC runtime dialogue” y en `docs/design/PHASE6_LLM.md` §6.3.
 
 ---
 
@@ -18,11 +20,16 @@
 8. [Skills & Spells System](#skills--spells-system)
 9. [Quest System](#quest-system)
 10. [Dialog System](#dialog-system)
-11. [Scripting System (Lua API)](#scripting-system-lua-api)
-12. [Creator UI Capabilities](#creator-ui-capabilities)
-13. [Recent Features & Best Practices](#recent-features--best-practices)
-14. [Discovered World Atlas](#discovered-world-atlas)
-15. [Game Client Tab Container Widget](#game-client-tab-container-widget)
+11. [Dungeon Builder (Phase 5.1)](#dungeon-builder-phase-51)
+12. [Scripting System (Lua API)](#scripting-system-lua-api)
+13. [Creator UI Capabilities](#creator-ui-capabilities)
+14. [Recent Features & Best Practices](#recent-features--best-practices)
+15. [Discovered World Atlas](#discovered-world-atlas)
+16. [Game Client Tab Container Widget](#game-client-tab-container-widget)
+17. [Derived Attributes (Phase 2.3)](#derived-attributes-phase-23)
+18. [Progression (Phase 2.4): XP Curve, Talents, Prestige](#progression-phase-24-xp-curve-talents-prestige)
+19. [Client UX Enhancements (Phases 3.2, 3.4, 3.7)](#client-ux-enhancements-phases-32-34-37)
+20. [Phase 6 LLM Integration (Design And Foundation)](#phase-6-llm-integration-design-and-foundation)
 
 ---
 
@@ -33,7 +40,9 @@
 - **Item effects:** `effects` contains `{trigger, name, text}` entries (`onHit`, `onEquip` or `onUse`; custom triggers are displayed as authored). Author player-readable effect lines; missing lines fall back to the linked script's display name and generic effect text. Inventory copies backfill template effect data; examine, shop and item cards show the same lines. These descriptions do not execute scripts.
 - **Protocol and character state:** Item examine sends a structured `examineResult` payload alongside compatible text. Optional `hello` advertises protocol version/capabilities. Combat reattach restores the roster, actor, target, deadline and queued action; selected-character payloads mark guest identity. See [structured messages](docs/structured-messages.md).
 - **Creator workflow:** Search with Ctrl+K; review references before deletion. Content health and `tales -check` validate reachability, entity references, quests and movement. Room/NPC inspectors, quest debugger, deterministic loot previews, loot-table/spawner editors, map overlays and live NPC/instance views share this data. Admins can inspect live characters, run operations and undo audited edits through the game loop. Entity IDs use `EntitySelectButton` and its filterable modal.
-- **Access and security:** Optional SSH supports classic text play and 80×25 Door play with device confirmation, linked keys, guest limits and sanitized terminal output. Public classic device login issues expiring, revocable account sessions via [device login](docs/device-login.md). Auth0 requires audience and issuer; HTTP Bearer auth and one-use WebSocket tickets remain the browser contract. Door now supports catalog buy/sell, display names and scripted fights.
+- **Access and security:** Optional SSH supports classic text play and 80×25 Door play with device confirmation, linked keys, guest limits and sanitized terminal output. Public classic device login issues expiring, revocable account sessions via [device login](docs/device-login.md). The fork defaults to local username/password accounts (`auth: local` in `config/gamemode.yaml`); Auth0 is an optional mode that requires audience and issuer only when enabled. HTTP Bearer auth and one-use WebSocket tickets remain the browser contract. Door now supports catalog buy/sell, display names and scripted fights.
+- **Adventure content pack:** `import/adventure/` adds four zones on top of the hub — The Training Grounds (tutorial, 6 rooms), The Buried Vault (13), Frostspine Caverns (12) and The Elder Maw (4-room raid), plus 2 Millstone Hollow hub rooms (37 room files in total) — and 24 items, 22 NPCs, 9 loot tables, 10 spawners, 4 scripts and 2 quests in `pkg/importer` YAML. `pkg/importer/adventure_pack_test.go` loads the pack and `TestAdventurePackHealth` fails the build on any content-health error **or** warning; `TestAdventurePackReachability` fails on unreachable islands. Design: `docs/design/PHASE5_DUNGEONS.md`.
+- **Fork docs:** setup and deployment in `docs/fork-setup.md`; player-facing system guides in `docs/user/` — `clans.md`, `dms.md`, `channels.md`, `party.md`, `combat.md`.
 
 ## Data Structures (Entities)
 
@@ -478,6 +487,23 @@ MarkCollectedCopyItem(templateID string)
 // Stored in Flags["collected_copy_items"] as array of template IDs
 ```
 
+### AI Character Generation (Swappable LLM Provider)
+**Feature**: Character creation can generate names and descriptions through any LLM provider behind the `llm.Client` contract (`Complete(ctx, systemPrompt, userPrompt, temperature)`), with a local **Ollama** daemon as the default provider and hosted **Groq** as the alternative.
+
+**Provider selection** (`LLM_PROVIDER`, via `llm.NewFromEnv()`):
+- `ollama` (default) — local daemon at `OLLAMA_BASE_URL` (default `http://localhost:11434`), model `OLLAMA_MODEL` (default `llama3.1`), HTTP timeout `LLM_TIMEOUT_SECONDS` (default 60). No API key.
+- `groq` — hosted API (`llama-3.3-70b-versatile`), requires `GROQ_API_KEY`.
+- `none` / `off` / empty — generation disabled.
+- Unset — legacy behavior: Groq when `GROQ_API_KEY` exists, otherwise Ollama.
+- Unknown value — generation disabled.
+
+**Behavior**:
+- Endpoint: `POST /api/generate/character` (auth required; guests rejected; per-user rate limit of 10 requests/hour).
+- `generate` field: `"name"`, `"description"`, or `"both"`.
+- Requests send system + user prompts with the template hints (archetype, race, class, backstory) wrapped in an untrusted-input guard.
+- No provider configured → `503 {"error": "AI generation is not configured"}`; provider failure → `500`.
+- Handler depends only on the `llm.Client` interface (`handler.GenerateHandler.LLMClient`), so providers are interchangeable without handler changes.
+
 ---
 
 ## Multiplayer Session & Social System
@@ -524,11 +550,57 @@ The server broadcasts this to rooms with online active characters only. The
 client marks `isYou` locally based on the currently selected character because a
 single broadcast is shared by multiple users.
 
+### Global Chat Channels (Phase 4.6)
+
+Server-wide chat channels broadcast to every connected client. Supported
+channels: **general**, **trade**, **lfg**, **help**, **roleplay**, **admin**.
+
+```bash
+chat general Anyone around?      # Canonical form for all channels
+chat trade WTB iron ore
+general hello                    # Direct shortcut: general, lfg, roleplay, admin
+lfg need a healer for the cellar
+```
+
+`help` and `trade` are deliberately **not** registered as direct shortcuts —
+the existing `help` command and the merchant `trade` alias keep those words.
+Use `chat help ...` / `chat trade ...` for those two channels. Unknown first
+words (e.g. `foo hola`) are not intercepted and fall through to room chat.
+
+Each line is pushed with `Audience: MessageAudienceGlobal` as a normal
+`message` type (`[Channel] Name: text`). The payload carries an optional
+`channel` tag (`general|trade|lfg|help|roleplay|admin`) and the play client
+routes tagged lines (and `[Channel] …` prose from older senders) into its
+**channel** chat tab with per-tab unread counts — `public/mud-client/src/game/chatTabs.js`
+(`CHAT_TABS = say|tell|party|channel|system`) and `ui/ChatPanel.svelte`. The
+**admin** channel is restricted:
+`message.FromUser.IsAdmin()` must be true, otherwise the sender gets
+"Admin channel is restricted." Backend only — `/pkg/mudserver/game/commands/channels.go`.
+Player guide: `docs/user/channels.md`.
+
 ### Party Commands
 
 `party create`, `party invite <player>`, `party accept`, `party decline`,
 `party leave`, `party kick <player>` (leader), `party promote <player>` (leader),
-`party list`, `party follow`, `party unfollow`, `party say <message>` (or `party <message>`).
+`party list`, `party follow`, `party unfollow`, `party say <message>` (or `party <message>`),
+`party loot [rule]`, `party readycheck`, `party ready`, `party notready`
+(short alias `p` throughout; usage line: `partyUsage()` in
+`pkg/mudserver/game/commands/party.go`).
+
+**Loot rule** (`party_loot_ready.go` → `handleLoot`): bare `party loot` prints
+the current rule (default `free`). Changing it is **leader only** and persists
+on the Party row (`LootRule`), so it survives restarts. Accepted values:
+`free`, `leader`, `roundrobin`, `needgreed` (the alias `need/greed` is
+normalized to `needgreed`). The rule is pushed to the overlay as `lootRule` in
+the `party` payload (`PartyMessage.LootRule`).
+
+**Ready check** (`handleReadyCheck` / `handleReady`): `party readycheck` is
+**leader only** and starts a 30-second window on the in-memory session registry
+(`pkg/mudserver/game/sessions_ready.go`). Members answer with `party ready` /
+`party notready`; each change pushes `[Party] Ready: n/m · Not ready: n/m` to
+the party. There is no timer goroutine: expiry is evaluated lazily, so the first
+answer *after* the window elapsed sends `[Party] Ready check over: n/m ready.`
+and clears the check. Ready state is not persisted.
 
 Party membership is persisted in the existing `Party` entity (SQLite JSON),
 including `leaderCharacterId`. Creator is leader. Soft/hard cap: **5** members
@@ -538,7 +610,7 @@ get a clear timeout notice + `party_invite{pending:false}`). Guests may invite,
 accept, decline, follow, and chat in parties (Friends still refuse guests).
 
 Structured WebSocket payloads:
-`party` `{inParty,partyId,partyName,leaderId,maxMembers,members[{id,name,online,level,class,portrait,isLeader}]}`
+`party` `{inParty,partyId,partyName,leaderId,maxMembers,members[{id,name,online,level,class,portrait,isLeader}],following,lootRule}`
 and `party_invite` `{pending,inviterName,partyId,expiresAt}` (clear with `pending:false`).
 
 Client (Party invite popup + guest parties, cache-bust `?v=partyinvite1`): HUD Party
@@ -550,6 +622,13 @@ pending invite opens a centered Accept/Decline popup with a countdown (not only 
 terminal line). Friends rows use matching **Invite** outline. Leader sees Kick on
 other members.
 
+The same panel holds a **Loot** radio group (leader only; sends
+`party loot <rule>`, read-only label for everyone else) and a **Ready check** control (leader
+starts it, members answer with Ready / Not ready; the panel classifies the
+`[Party] Ready check…` lines to show active/complete state) —
+`public/mud-client/src/game/ui/PartyOverlay.svelte`, rule labels in
+`public/mud-client/src/game/partyState.js`.
+
 Room players overlay and Friends rows can invite online players. Guests see the
 Party button and full party UI.
 
@@ -559,7 +638,7 @@ already in combat. Joiners receive `combatStart` (BattleStage), initiative is
 rolled, and turn order is rebuilt (current actor preserved). Cross-room join
 is refused. Party membership is **not** required to join; when combat starts,
 same-room online party members get a `[Party] … Type 'attack <enemy>' to join`
-nudge. Out of scope: need/greed item assignment, auto-pull without attack,
+nudge. Out of scope: an interactive need/greed roll UI, auto-pull without attack,
 following anyone except the party leader, Flutter.
 
 ### Party Loot & XP Share (v1)
@@ -573,8 +652,23 @@ gets `total/n` and any remainder is dropped.
 When two or more recipients are in the same party, leftover gold and XP
 (`total % n`) go to the killer so nothing is discarded. The victory combat log
 lists each recipient (`PARTY SHARE`), and every recipient gets a one-line
-`[Party] Equal split…` toast. Item drops stay on the ground (no need/greed).
-Quest kill credit stays with living combatants only.
+`[Party] Equal split…` toast. Quest kill credit stays with living combatants only.
+
+**Item drops follow the party loot rule** (`party loot`, default `free`):
+
+- `free` — drops stay on the ground for normal `pickup` (unchanged legacy behavior).
+- `leader` / `roundrobin` / `needgreed` — each drop is assigned at victory by
+  `selectLootRecipient` (`pkg/mudserver/game/loot_party.go`), using the living
+  players in the fight as the eligible list and the party/leader of the first
+  living player: the party leader (even when they are not among the eligible),
+  the next player in a rotation, or a random eligible player (`needgreed` is a
+  random pick today — there is no roll prompt). Every hand-out is announced as
+  `[Party] <item> → <name> (<reason>)` and lands straight in that character's
+  inventory; if the write fails the item falls back to the room. Assignment runs
+  only when the killer's party rule is not `free` (`game_combat.go` builds
+  `LootAssignmentContext`). Round-robin position resets per victory.
+
+See `docs/user/party.md` for the player-facing command table.
 
 ### Party Follow
 `party follow` starts following the current party leader. `party unfollow` stops.
@@ -592,7 +686,8 @@ Leaving the party, being kicked, the leader leaving, or a leadership change clea
 the follow flag. The flag is in-memory on the game server. The party payload
 includes `following` for the recipient. The reply is a `[Party] You are following <leader>`
 line (party strip and room toast). Still out of scope: auto-join combat without
-`attack`, item need/greed, and following a member who is not the leader.
+`attack`, an interactive need/greed roll (drops are assigned by the party loot
+rule instead), and following a member who is not the leader.
 
 ### Friends (v1)
 Per-character friends list stored as `Character.FriendIDs` (character UUIDs) in
@@ -613,6 +708,192 @@ Client: HUD group button (next to the character switcher) opens a Friends
 panel — list, Tell (whisper), Remove, add-by-name. Room players overlay can
 add the other player. Guests hide the HUD entry.
 
+### Clans (Phase 4)
+
+Persistent clan storage plus the `ClansService` business layer, the
+player-level REST API under `/api/clans`, and the play-client **ClanPanel** are
+implemented. There are still **no game commands** (`clan …`) and **no
+WebSocket payloads** for clans — the panel talks REST only. Player guide:
+`docs/user/clans.md`.
+
+**Client** (`public/mud-client/src/game/ui/ClanPanel.svelte`): toggled by the
+**`C`** key or the header shield button (`CharacterSwitcher.svelte`, hidden for
+guests) from `clanPanelOpen` in `uiChrome.js`; `Escape`, the close button or an
+outside click dismisses it. It loads `GET /api/clans/mine` on open (manual
+**Refresh**, no polling and no push notifications) and drives every action over
+`public/mud-client/src/api/clans.js`: create, invite by character ID, accept /
+decline pending invites, kick, cycle ranks (leader only), deposit / withdraw
+gold, disband, plus the member list with rank badges.
+
+Entities (`pkg/entities/clan/`):
+
+```go
+type Clan struct {
+    *entities.Entity
+    Name, Tag      string    // Tag is short, e.g. "DRK"
+    LeaderCharID   string
+    FoundedAt      time.Time
+    Level          int
+    XP             int64
+    Bank           int64     // Clan gold
+    MOTD, Description string
+    Active         bool      // false = dissolved (soft delete)
+    MaxMembers     int
+    CreatedAt, UpdatedAt time.Time
+}
+
+type ClanMember struct {
+    *entities.Entity
+    CharacterID, ClanID string
+    Rank         Rank        // member | officer | leader
+    JoinedAt     time.Time
+    Contribution int64
+    LastOnline   time.Time
+}
+
+type ClanInvite struct {
+    *entities.Entity
+    ClanID, CharacterID, InviterID string
+    Status     string        // pending | accepted | declined | expired
+    CreatedAt, ExpiresAt time.Time
+}
+
+type ClanBankLedger struct {  // append-only
+    *entities.Entity
+    ClanID, CharacterID string
+    Type    string            // deposit | withdraw
+    Amount, Balance int64
+    Note    string
+    Timestamp time.Time
+}
+```
+
+Persistence (`ClanRepository`, `pkg/repository/clans_sqlite.go`):
+
+- Tables `clans`, `clan_members`, `clan_invites`, `clan_bank_ledger` use the
+  standard `(id, data)` JSON pattern with `json_extract` indexes.
+- **One clan per character:** `AddMember` rejects a character that already has a
+  membership; a unique index on `(characterID, clanID)` additionally prevents
+  duplicate rows.
+- **Bank:** `Deposit`/`Withdraw` update `Clan.Bank` and append an immutable
+  `clan_bank_ledger` row (type, amount, resulting balance, note, timestamp).
+  Withdrawals fail on insufficient funds.
+- Level/XP helpers: `AddXP`, `UpdateLevel`. Soft delete via `Active=false`.
+
+Service (`ClansService`, `pkg/service/clans.go`):
+
+- `CreateClan(actorCharID, name, tag, description)` — fails when the character
+  already belongs to a clan; the founder joins as `leader`.
+- `Invite(clanID, actorCharID, targetCharID)` — leader/officer only; rejects
+  self-invites, characters already in a clan, and duplicate pending invites.
+- `AcceptInvite(inviteID, characterID)` / `DeclineInvite(inviteID, characterID)`
+  — the invite is located among the character's own invites by UUID; accepting
+  adds the character with the default `member` rank.
+- `Kick(clanID, actorCharID, targetCharID)` — leader/officer only; the leader
+  can never be kicked.
+- `ChangeRank(clanID, actorCharID, targetCharID, rank)` — leader only;
+  `ParseClanRank` maps the wire names `member`/`officer`/`leader` to `clan.Rank`.
+- `Deposit`/`Withdraw(clanID, actorCharID, amount)` — append-only ledger plus
+  balance update; only the leader may withdraw.
+- `Disband(clanID, actorCharID)` — leader only; removes members then deletes
+  the clan. `ListMembers`, `GetPendingInvitesForCharacter` support the API.
+
+REST API (`pkg/server/handler/clans.go`, all authenticated):
+
+| Method + Path | Permission |
+|---------------|------------|
+| `POST /api/clans` | acting character owner |
+| `GET /api/clans/mine?characterId=` | acting character owner |
+| `POST /api/clans/:id/invite` | leader/officer of the clan |
+| `POST /api/clans/invites/:inviteId/accept` | invite owner |
+| `POST /api/clans/invites/:inviteId/decline` | invite owner |
+| `POST /api/clans/:id/kick` | leader/officer; leader immune |
+| `POST /api/clans/:id/rank` | leader only |
+| `POST /api/clans/:id/deposit` | any clan member |
+| `POST /api/clans/:id/withdraw` | leader only |
+| `POST /api/clans/:id/disband` | leader only |
+
+### Private Messaging / DMs (Phase 4)
+
+Persistent private messaging with the `DMService` business layer, the
+player-level REST API under `/api/dm`, and the play-client **DMsPanel**. The
+`tell` command is separate and still in-memory (online players only, nothing
+persisted); wiring `tell` to this layer comes later. Player guide:
+`docs/user/dms.md`.
+
+Entities (`pkg/entities/dm/`):
+
+```go
+type DMChannel struct {
+    *entities.Entity
+    ParticipantA, ParticipantB string  // canonical order, characterIDs
+    CreatedAt     time.Time
+    LastMessageAt time.Time
+    LastMessageID string
+    UnreadA, UnreadB int               // denormalized unread counters
+}
+
+type DMMessage struct {
+    *entities.Entity
+    ChannelID  string
+    FromCharID string
+    Body       string
+    SentAt     time.Time
+    ReadAt     *time.Time              // nil = unread
+}
+```
+
+Persistence (`DMRepository`, `pkg/repository/dm_sqlite.go`):
+
+- Channels are created **on demand** by `FindOrCreateChannel`: the two
+  participant IDs are stored in canonical (sorted) order, so a pair of
+  characters maps to exactly one channel regardless of who starts it.
+- `dm_messages` is the one table that deviates from the pure JSON pattern. It
+  also stores real `channel_id`, `sent_at` (Unix ms) and `from_char_id` columns
+  plus indexes, so `FindMessagesSince(channelID, since)` runs
+  `WHERE channel_id = ? AND sent_at > ? ORDER BY sent_at ASC`.
+- Reads: `MarkMessageRead(id)` stamps one message; `MarkRead(channelID, reader)`
+  zeroes the reader's unread counter and marks all messages they did not send as
+  read.
+- Helpers: `FindChannelsByCharacter`, `UpdateLastMessage`, `IncrementUnread`,
+  `GetUnreadCount`, `FindMessagesByChannel` (latest N, oldest first),
+  `DeleteMessage`.
+
+Service (`DMService`, `pkg/service/dms.go`):
+
+- `GetChannels(characterID)` — channels where the character is a participant.
+- `FindOrCreateChannel(a, b)` — delegates to the repository, which canonicalizes
+  the pair so `(a,b)` and `(b,a)` map to the same channel; self-DMs are rejected.
+- `SendMessage(channelID, fromCharID, body)` — validates that `fromCharID` is a
+  participant (anti-spoof), stamps `sentAt`, updates `lastMessageAt` and
+  increments the recipient's unread counter.
+- `GetMessages(channelID, characterID, limit, since)` — participants only;
+  `since` returns messages after a timestamp (index-backed), otherwise the
+  latest `limit` messages oldest-first.
+- `MarkRead(channelID, characterID)` — participants only; zeroes the reader's
+  unread counter and stamps received messages as read.
+
+REST API (`pkg/server/handler/dms.go`, all authenticated; acting character must
+be owned by the user, and the service enforces channel participation):
+
+| Method + Path | Permission |
+|---------------|------------|
+| `GET /api/dm/channels?characterId=` | acting character owner |
+| `POST /api/dm/channels` | acting character owner |
+| `GET /api/dm/channels/:channelId/messages?characterId=&limit=&since=` | channel participant |
+| `POST /api/dm/channels/:channelId/messages` | channel participant (anti-spoof) |
+| `POST /api/dm/channels/:channelId/read` | channel participant |
+
+**Client** (`public/mud-client/src/game/ui/DMsPanel.svelte` + fetch helpers in
+`public/mud-client/src/api/dms.js`): toggled by the **`M`** key or the header
+mail button (`CharacterSwitcher.svelte`, hidden for guests) from `dmsPanelOpen`
+in `uiChrome.js`. While open it re-fetches the channel list every **5 seconds**
+(`POLL_MS`), renders a per-channel **unread badge** from `unreadA`/`unreadB`,
+and calls `POST …/read` for the channel being read. Starting a conversation
+uses `POST /api/dm/channels` (find-or-create), messages load with
+`limit: 100`, and sending posts to the channel. There is **no WebSocket push**
+for DMs — the panel only sees new traffic on its next poll.
+
 ### Client Session UX
 The MUD client exposes connection state in `MUDXPlusStore`:
 `disconnected`, `connecting`, `connected`, and `reconnecting`.
@@ -624,7 +905,9 @@ Choosing one sends `sc <name>`. A signed-in player with more than one character
 sees that picker once per login; the server still enters on `lastCharacter`.
 Guests get **Continue with X**, **Continue with Google**, and **Email and password**
 (Auth0 `loginWithRedirect`; X and Google pass `connection` so the password form
-is not the default). **Log out** clears the Auth0 session and this tab's guest token and
+is not the default). The Auth0 buttons apply when `AUTH_MODE=auth0`; in the
+default local mode the server exposes `POST /api/auth/register` and
+`POST /api/auth/login` for username/password accounts. **Log out** clears the Auth0 session and this tab's guest token and
 returns to the welcome choice instead of restoring a guest. `Client.js` handles `roomPresence` messages and
 updates `MUDXPlusStore.players` without changing the room description.
 
@@ -675,8 +958,16 @@ type NPC struct {
     IdleDialogID      string          // Ambient chatter
     IdleDialogTimeout time.Duration   // Idle dialog frequency
     LastIdleDialog    time.Time       // Last ambient chatter trigger
+
+    // Free-form LLM dialogue opt-in (Phase 6.3, cortes 1–3, Batches 25–27; nil = legacy NPC)
+    LLM               *LLMConfig      // see "NPC free-form dialogue" below
 }
 ```
+
+Field details (`LLMConfig` in `pkg/entities/npcs/llm.go`, including the structured Big5
+personality/goals/secrets/relations added in Batch 26) and the `ask` command that consumes
+them are documented in the Phase 6 section, under
+["NPC runtime dialogue (`ask`, FASE 6.3 cortes 1+2+3 — Batches 25–27)"](#phase-6-llm-integration-design-and-foundation).
 
 ### NPC Behavior Loop
 NPCs are processed by the game update loop every 10 seconds:
@@ -688,6 +979,13 @@ NPCs are processed by the game update loop every 10 seconds:
 - NPC movement sends silent room updates so clients refresh NPC presence without reprinting the room description.
 
 Room NPC payloads sent to the MUD client include `isEnemy`, `isMerchant`, `isQuestGiver`, `hasDialog`, `hasIdleDialog`, and `state` so the UI can show interaction badges without duplicating backend lookup rules.
+
+### NPC Factory and Level Scaling (client, Batches 16/19)
+
+- **NPC factory panel (key `N`):** `public/mud-client/src/game/ui/NpcFactory.svelte` + pure module `public/mud-client/src/game/npcFactory.js` (templates, range validation, backend payload mapping). State persists in `localStorage` (`mud-client.npc-factory.v1`) and, when a creator token is present, syncs best-effort against `/api/npcs/templates` (pull) and `POST/PUT /api/npcs` (push) through `src/api/npcs.js` (`NPC_CRUD_AVAILABLE = true`); without a token everything stays local.
+- **Level scaling:** `public/mud-client/src/game/npcBehavior.js` → `scaleTemplate(template, targetLevel)` applies deterministic rates over the current base (HP ×0.15/level, damage ×0.10, XP ×0.25, gold ×0.20) and records `scaling.targetLevel`. Used by the factory's preview (`NpcFactory.svelte`), not by the server.
+- **Behavior model:** the same module exports a serializable state machine (states + aggro + abilities) and `toLuaBehavior()` as **preview/export only** — nothing in the client executes it. Tests: `npcBehavior_test.mjs`.
+- **Storage (FASE 5.3, working tree):** table `npc_templates` (migration `migrateBatch20NPCTemplates`), entity `pkg/entities/npcs/templates.go` (`NPCTemplate`, with `Behavior`/`Scaling` kept as `json.RawMessage` so the frontend payload round-trips) and `Factory.NPCTemplates()` (`pkg/repository/npc_templates_sqlite.go`, indexes on `name`/`role`). **No service/endpoint consumes it yet**: `GET /api/npcs/templates` still reads the `npcs` collection filtered by `isTemplate`.
 
 ### Enemy Trait
 ```go
@@ -1064,6 +1362,30 @@ skills unequip <name>   # Remove skill from slots
 - Cleric: Heal, Holy Smite, Divine Shield, Prayer of Healing, Resurrection
 - Druid: Heal, Moonfire, Thorns, Regrowth, Starfall
 
+### Class Catalog & Magic Schools (`pkg/classkit`)
+The combat kit's classes come from a **world-pack catalog**, not the database. `pkg/classkit` loads every `*.yaml` in the first directory found, in order: `CLASSKIT_DIR`, `import/mvp-rpg-1/data/classes`, `../talesmud-rpg-1/data/classes`, then `data/classes` (found by walking up from the working dir). With no pack, the catalog falls back to the generic Warrior/Rogue/Mage sample trio. The fork ships its own pack in `data/classes/` (format and schools documented in `data/classes/README.md`).
+
+Each class YAML defines the create-screen card (`template`), the balance row, races, charges, and hotbar skills. `skills[].effect` must be one of the engine primitives in `KnownEffects`: `brace, slam, stand, slip, nick, smoke, inscribe, sear, glyph, guard, bolt, rig, overload, mend, renew`. `mend` is a **direct heal** and `renew` is a **heal-over-time (HoT)**; both target `ally`, fall back to the caster when the target is an enemy, dead, or fled, and scale off the caster's max HP (`tick = max HP × multiplier`). `renew` heals once per round for `duration` rounds (3 when omitted). Both are cooldown-gated like the rest of the kit. See the healing/kit mapping in `pkg/mudserver/game/combat/classkit.go` (`KitMend`, `KitRenew`).
+
+**Mana cost & per-school components (`mana_cost`, `component`):** a kit skill may list `mana_cost` (integer, default `0`) and a free-text `component` (the per-school reagent hook). When `mana_cost > 0`, the caster pays it in the same `pay()` step as a cooldown: **the mana is deducted AND the cooldown still starts** when the skill also has a `cooldown`. A cast is rejected before anything is paid when `CurrentMana < mana_cost` (`Not enough mana for <skill> (need N, have M).`), so a failed cast spends no mana and starts no cooldown. `mage_inscribe` stays at `mana_cost: 0` (its tooltip and the no-mana regression test depend on it) but still carries the `arcane_dust` hook. `component` is **structural only** today: there is no physical reagent inventory; it flows from the YAML through `classkit.SkillSpec` into `skills.Skill`, the `/api/classes` payload (`ClientSkill.component`), and `contenthealth` so a later inventory pass can require the reagent without a schema change. Components by school: `arcane_dust` (arcane, high mana), `fire_salt` (fire, medium), `divine_wax` (divine, medium), `nature_herb` (nature, medium), `shadow_essence` (shadow, unused so far). Physical (`martial`) skills keep `mana_cost: 0` and no component. Mage and Sorcerer also gain a self-only mend (`mage_mend`, `sorcerer_mend`) at `multiplier: 0.20` with a visible mana cost.
+
+**Magic schools (additive `school` field):** an optional `school` key tags a class with a discipline. Empty means a physical class. Registered ids: `martial` (none), `fire` (Fuego), `ice` (Hielo), `arcane` (Arcano), `divine` (Divino), `nature` (Naturaleza), `shadow` (Sombras). `classkit.SchoolName(id)` returns the display name. An unregistered value fails the load (`class <id> has unknown school "<value>"`); a YAML with no `school` still loads.
+
+**Base pack (`data/classes/`):**
+
+| id | Name (es) | School | Role | Kit effects |
+|----|-----------|--------|------|-------------|
+| `warrior` | Warrior (Guerrero) | `martial` | Plate front line | brace, slam, stand |
+| `rogue` | Rogue (Pícaro) | `martial` | Two-swing skirmisher | slip, nick, smoke |
+| `mage` | Mage (Mago) | `arcane` | Cloth caster | inscribe, sear, mend (self), glyph |
+| `cleric` | Cleric (Clérigo) | `divine` | Divine bulwark & healer | guard, mend, glyph, slam, renew, bolt |
+| `druid` | Druid (Druida) | `nature` | Fae-fire caster & healer | inscribe, glyph, renew, sear, mend |
+| `sorcerer` | Sorcerer (Hechicero) | `fire` | Glass cannon | bolt, sear, rig, overload, mend (self) |
+
+Spanish forms are aliases (`guerrero`, `mago`, `picaro`, `clerigo`, `druida`, `hechicero` and the feminine forms). Skill ids are prefixed by class (`<class>_...`) so they stay unique across the hotbar. The Sorcerer has no dedicated portrait and uses `portrait_class: mage`.
+
+Player guide for equipping/using these skills and for what `mend` / `renew` do in a fight: `docs/user/combat.md`.
+
 ---
 
 ## Quest System
@@ -1180,7 +1502,21 @@ ql, questlog    # Aliases
 quest <name>    # Show quest details
 
 abandon <name>  # Abandon active quest
+
+offer <npc>     # Ask an NPC quest-giver for a contextual quest (Batch 18)
+offer accept    # Accept the pending offer (persists the quest)
+offer decline   # Decline it (aliases: no, reject, pass)
 ```
+
+### Contextual Quest Offers (`offer` command, Batch 18)
+
+- **Files:** `pkg/mudserver/game/commands/offer.go` (+ `offer_test.go`), `pkg/mudserver/game/quest_offer.go`, provider installed in `pkg/server/llm.go` (`installContextualQuestProvider`), registered in `commandprocessor.go`.
+- **Who answers:** only a quest-giver NPC in the current room (same `IsQuestGiver` contract as the dialog UI: authored quest whose `source.npcId` is the template/instance).
+- **Context:** character level + `room.Area` (falls back to `room.ID`) + NPC `TemplateID` → `Game.RequestContextualQuestOffer` → `llmgen.GenerateContextualQuest` (`QuestContext{PlayerLevel, ZoneID, Theme, SourceNPCID, CharacterID, UserID}`).
+- **Asynchronous:** generation runs outside the command loop and is published with `Game.Call`; the command answers in prose (`offer.go`), it never blocks the loop.
+- **Limits:** 60 s per-character cooldown + a semaphore of 2 concurrent generations (`QuestOfferBusy`), plus the pipeline's own `quest:ctx:<characterID>` limit key.
+- **Fallback:** with `LLM_PROVIDER=none` (nil client) the generator returns its deterministic fallback; without an installed provider the command says there is no work.
+- **On accept:** `QuestsService.Store` + `AcceptQuest`, then `questAccepted` + `questLog` messages; `bindQuestToSourceNPC` re-points `source`/`turnIn` at the offering NPC only if the mutated quest still validates against the live world. The quest is persisted **only** on accept.
 
 ### Quest UI Features
 
@@ -1470,7 +1806,6 @@ When a collect quest is accepted, matching items already in inventory initialize
 4. **Send Notification** - WebSocket message with rewards
 5. **Update Quest Log** - Client refreshes via API call
 6. **Update Achievements** - Calculated client-side on quest log update
-```
 
 ### Quest Scripting API
 ```lua
@@ -1546,6 +1881,7 @@ type DialogState struct {
 - **One-time** - `ShowOnlyOnce` options disappear after first selection
 - **Variations** - Random or sequential alternate texts
 - **Exit markers** - Return to "main" node on completion
+- **Free-form complement (`ask` and `talk`, Batches 25–29)** — además de `ask <npc> [question]`, `talk` saluda con LLM solo cuando faltan diálogo autoral y quests; el texto libre puede continuar una conversación `__llm__` elegible. Las opciones del LLM pueden continuar el árbol autoral, pedir seguimiento, terminar o ejecutar una acción `quest:<id>` disponible y validada. Memoria/personalidad y relaciones dinámicas siguen el flujo descrito en Fase 6; el LLM no crea quests. El flujo autoral y sus quests mantienen prioridad.
 
 ### Dialog API
 ```lua
@@ -1567,6 +1903,28 @@ local visited = tales.dialogs.hasVisited(conversationID, nodeID)
 -- Get visit count
 local count = tales.dialogs.getVisitCount(conversationID, nodeID)
 ```
+
+---
+
+## Dungeon Builder (Phase 5.1)
+
+Authoring tool for dungeon layouts: a full-screen panel in the play client that stores designs locally and, with a creator session, mirrors them to the REST API. **Persistence only — designs are not instantiated in the game yet.**
+
+### Client
+
+- **Panel:** `public/mud-client/src/game/ui/DungeonBuilder.svelte`, opened with the **`D` key** (wired in `Game.svelte` as `dungeonBuilderOpen`, listed in `ShortcutSheet.svelte` and in `keyboardShortcuts.js` as the `dungeonBuilder` panel).
+- **Pure modules:** `src/game/dungeonBuilder.js` (grid, rooms, corridors, encounters, loot tables, entry→exit reachability by BFS, overlap detection, test mode) and `src/game/dungeonLibrary.js` (export/import of the `definition` blob). Tests: `dungeonBuilder_test.mjs`, `dungeonLibrary_test.mjs`.
+- **Storage:** `localStorage` is the source of truth; `src/api/dungeons.js` (`DUNGEON_CRUD_AVAILABLE = true`) does **best-effort** sync to `/api/dungeons` when a creator token is present. 401/403/404 or network failure degrades to local storage with a visible warning.
+
+### Server (`/api/dungeons`)
+
+- **Data path:** table `dungeons` (migration `migratePhase5Dungeons`, `(id, data)` JSON + `idx_dungeons_name`/`idx_dungeons_author`) → `pkg/entities/dungeons/` → `pkg/repository/dungeons_sqlite.go` (`Factory.Dungeons()`) → `DungeonsService` (`pkg/service/dungeons.go`, exposed on the `Facade`) → `pkg/server/handler/dungeons.go`.
+- **Routes:** authenticated reads `GET /api/dungeons?name=&author=&limit=` (summary DTO without `definition`) and `GET /api/dungeons/:id` (detail with `definition`); creator-gated writes `POST /api/dungeons` (201), `PUT /api/dungeons/:id` (200/404), `DELETE /api/dungeons/:id` (204/404); 400 on validation errors, 403 without the role.
+- **Validation:** `name` and grid required, `definition` must be valid JSON (opaque blob, round-tripped as authored); `CreatedAt` is preserved on update.
+- **Tests:** `pkg/server/handler/dungeons_test.go`, `pkg/server/dungeons_http_test.go` (role gate + full HTTP round trip).
+- **Contract:** [`docs/API.md`](docs/API.md) §5.
+
+**Not implemented yet:** no compile/run endpoint and no spawn/instancing of a saved design inside the game world (Batch 19 pendiente).
 
 ---
 
@@ -2409,6 +2767,35 @@ layoutStore.setActiveTab(containerId, tabIndex)           // Switch active tab
 
 ---
 
+## Local Account Authentication (Fork Default)
+
+### Overview
+The fork boots with `auth: local` (from `config/gamemode.yaml`), so registered users sign in with a username and password instead of an external Auth0 tenant. Auth0 stays available by setting `AUTH_MODE=auth0`.
+
+### Service (`pkg/authlocal/`)
+- Passwords are hashed with Argon2id (`pkg/authlocal/password.go`); API responses never include the hash.
+- Session tokens are HS256 JWTs with issuer `talesmud-local`, `kind: "local"`, a 7-day TTL, subject = user ID, and `sv` = `SessionVersion`. Resetting a password bumps `SessionVersion` and revokes existing tokens.
+- `Register`/`Login` create or verify an account. Usernames are 3–20 lowercase letters/digits/underscore, passwords 8–128 characters, and emails must be full addresses. Login attempts burn a dummy Argon2id hash to reduce timing leaks.
+- Secret resolution (`authlocal.ResolveSecret`): `SESSION_SECRET`, then game-mode `session_secret`, then a generated key persisted at `secret_path` (default `data/session.key`, mode 0600).
+- Forgot/reset use hashed one-time tokens in the `auth_tokens` table; the default `OutboxMailer` writes them to `data/auth-outbox.log` and reports `DeliversExternally() == false`, so `/api/auth/forgot` and `/api/auth/reset` are mounted only when a real mailer is configured.
+
+### Endpoints
+| Method | Path | Auth | Notes |
+|--------|------|------|-------|
+| POST | `/api/auth/register` | public | Create account, returns a session token |
+| POST | `/api/auth/login` | public | Username + password, returns a session token |
+| GET | `/api/auth/me` | Bearer | Current account view |
+| POST | `/api/auth/forgot` | public | Only when reset mail is configured |
+| POST | `/api/auth/reset` | public | Only when reset mail is configured |
+
+Local tokens work as `Authorization: Bearer` on protected REST routes and on `POST /api/ws-ticket` for WebSocket upgrades. `AuthMiddleware` checks guest HMAC, device sessions, then local sessions before attempting Auth0 RS256, so local tokens never reach the external provider.
+
+### Configuration
+- `AUTH_MODE=local` (default) enables the service; `AUTH_MODE=auth0` disables it and uses Auth0 (`AUTH0_AUDIENCE`/`AUTH0_DOMAIN`/`AUTH0_WK_JWKS` required only then).
+- `config/gamemode.yaml` sets `auth: local`; the binary loads it automatically when no `-config` flag is passed, and the Docker image copies it into `/app/config/`.
+
+---
+
 ## Guest Mode System
 
 ### Overview
@@ -2477,8 +2864,558 @@ The leveling system (`CheckLevelUp`, `ApplyLevelUp`) respects `MaxLevelCap` auto
 - Guest HMAC tokens are validated before Auth0 JWTs in `AuthMiddleware`
 - Token claims: `sub` (RefID), `uid` (user entity ID), `exp` (30min), `guest: true`
 - If `GUEST_SECRET` is not set, a random key is generated at startup
-- Optional local username/password sessions (Argon2id) when a game-mode file sets `auth: local`. Classic servers leave this off. API responses omit the password hash. Login attempts are limited per client address. `X-Forwarded-For` is trusted only from loopback unless `trusted_proxies` or `TRUSTED_PROXIES` says otherwise.
+- Local username/password sessions (Argon2id) are the fork default: `config/gamemode.yaml` sets `auth: local`, or set `AUTH_MODE=local`. Set `AUTH_MODE=auth0` to use Auth0 instead. API responses omit the password hash. Login attempts are limited per client address. `X-Forwarded-For` is trusted only from loopback unless `trusted_proxies` or `TRUSTED_PROXIES` says otherwise.
 - `presentation: door_tui` serves `public/door` and `GET /api/door/config` (title, subtitle, token key). Classic mode does not mount `/door`. The page paints live rooms, exits, actions, NPCs, resources, and combat status, plus the last few command replies. Keys and typed lines become engine commands. A world pack may add `keymap.yaml` (per room, per area, and a combat overlay) and `character_paths.yaml`. `d` stays down. With no character selected, the page asks for a name, then a numbered path, then sex. An existing name is selected. A new character uses the pack path when that file is present, and otherwise a numbered system template. Reconnect runs the new-day pass without another select.
+
+---
+
+## Derived Attributes (Phase 2.3)
+
+Phase 2.3 introduced a single read-only derivation for combat-facing numbers (`pkg/entities/characters/derive.go`) so the combat engine, the client payload, and the talent system all read one shared projection instead of recomputing per caller.
+
+### DeriveStats formulas
+
+```go
+// pkg/entities/characters/derive.go
+func DeriveStats(c *Character, classDef *classkit.Def) DerivedStats
+```
+
+| Field | Formula | Bounds |
+|-------|---------|--------|
+| `MaxHP` | `c.MaxHitPoints` verbatim | mirrors the stored pool |
+| `MaxMana` | `c.MaxMana` verbatim | mirrors the stored pool |
+| `Stamina` | `STA + 2 * Level` | min 1 |
+| `Initiative` | `DEXMod + Level/2` | min 0 |
+| `Resist` | `WISMod + CONMod + Level/2` | min 0 |
+| `CritChance` | `5% + DEXMod * 1%` + kit bonus | clamped to `[0, 95]` |
+
+The kit bonus comes from the `classkit.Def` for the character (`classDef` is resolved with `classkit.Lookup(c.Class.ID)` when nil; an unknown class adds no bonus): `+2%` when `Balance.Swings > 1` (multi-swing kit) and `+2%` when `Primary == "DEX"`.
+
+The tuning constants live at the top of `derive.go`: `derivedStaminaPerLevel = 2`, `derivedCritBasePercent = 5.0`, `derivedCritPerDEXMod = 1.0`, `derivedCritSwingsBonus = 2.0`, `derivedCritDEXPrimaryBonus = 2.0`, `derivedCritCapPercent = 95.0`.
+
+`MaxHP`/`MaxMana` deliberately repeat the stored character fields: combat snapshots them when building a `CombatantRef` (`pkg/mudserver/game/combat/engine.go:114`), so the derived view never reshapes a live fight. The engine's natural-20 crit roll and the `1d20 + DEXMod` initiative roll are untouched by derivation — `CritChance` and `Initiative` are projections for UI and talent math, not inputs to those rolls.
+
+### Talent projections on DerivedStats
+
+`DeriveStats` finishes with `c.ApplyTalentBonuses(&ds)` and then re-clamps `CritChance`. The talent projections are separate fields so a legacy character (no talents) derives exactly the pre-talent values:
+
+| JSON field | Type | Meaning |
+|------------|------|---------|
+| `damageBonus` | float | +% basic attack damage |
+| `spellDamageBonus` | float | +% spell damage |
+| `damageReduction` | float | +% damage taken reduction |
+| `maxHpBonusPercent` | float | +% max HP |
+| `blockChance` | float | +% block chance |
+| `staminaRegen` | int32 | + stamina regen |
+| `spellCooldownBonus` | float | -% spell cooldown |
+| `healBonus` | float | +% heal output |
+| `evasion` | float | +% evasion |
+| `potionBonus` | float | +% potion strength |
+
+`MaxHPBonusPercent` is intentionally **not** folded into `MaxHP`: `MaxHP` mirrors the pool combat snapshots, so callers that want the talent-adjusted pool multiply `MaxHP` by `(1 + pct/100)`. Talent application sums per effect (`ApplyTalentBonuses` in `derive.go`), so map iteration order does not matter; unknown talent ids (for example an id removed from the catalog) are skipped, and `nil` character/map inputs are no-ops.
+
+### Where derived stats are used
+
+- **Character update payload** — `NewCharacterUpdateMessage` (`pkg/mudserver/game/messages/responses.go:459`) computes `DeriveStats` once and emits `stamina`, `initiative`, `resist`, `critChance`, the `talents` state, and the talent projections (`omitempty`, so they are absent at zero).
+- **Combat** — `CreateCombatantFromCharacter` copies `derived.MaxHP` / `derived.MaxMana` into the `CombatantRef`.
+- **Talent effects** — every rank bought through `talents spend` changes the next `DeriveStats` call; nothing has to be stored on the derived side.
+
+---
+
+## Progression (Phase 2.4): XP Curve, Talents, Prestige
+
+Design document: [`docs/design/PHASE2_4_PROGRESSION.md`](docs/design/PHASE2_4_PROGRESSION.md). Everything in this section is implemented (steps 2.4.1–2.4.7) unless stated otherwise.
+
+### XP curve and level cap
+
+- `pkg/mudserver/game/leveling/xp_curve.go` precomputes `XPTable[51]int32` with a 3-segment piecewise formula:
+
+  | Levels | Formula per level |
+  |--------|-------------------|
+  | 2–5 | `30 + 10 * l^0.60` |
+  | 6–15 | `50 + 15 * l^1.05` |
+  | 16–50 | `85 + 17 * l^1.10` |
+
+- Cumulative targets (verified in code): L2 ≈ 45, L5 ≈ 203, L10 ≈ 1,120, L20 ≈ 4,947, L30 ≈ 11,794, L40 ≈ 21,271, L50 ≈ 33,454.
+- `GetXPRequired(level)` consults `ruleset.XPRequired(level)` first, so a `progression.xp_required` override in `config/ruleset.yaml` wins over the built-in table without a code change.
+- Cap: `leveling.MaxLevel = 50` (hard cap) with `ruleset.LevelCap()` (`config/ruleset.yaml` → `progression.level_cap: 50`) driving `CheckLevelUp`, `GetXPForNextLevel`, and `GetXPProgress`. Guest characters keep their per-character `MaxLevelCap` (5).
+- XP sources: combat (`game_combat.go`), quests (`pkg/service/quests.go`), exploration (`leveling/xp_sources.go`, 5 XP per new room / 15 XP per new area).
+
+### Talent milestones
+
+- `leveling.TalentMilestoneInterval = 5`: levels **5, 10, 15, 20, 25, 30, 35, 40, 45, 50** each grant 1 point → **10 points** before prestige.
+- `TalentMilestonesBetween(oldLevel, newLevel)` counts milestones in `(old, new]`, so a multi-level jump credits every crossed milestone exactly once and never double counts on a reload.
+- `ApplyLevelUp` adds the points (`char.Talents.Points += gained`) and returns them in `LevelUpResult.TalentPointsGained` / `UnspentTalentPoints`; the level-up banner ends with `+ N Talent Point(s) earned!` and points at `talents list` / `talents spend <talent>`.
+
+### Storage
+
+`Character.Talents` is a JSON field on the character document — **no table and no DDL migration**:
+
+```go
+type CharacterTalents struct {
+    Points   int32            `json:"points"`   // unspent talent points
+    Spent    map[string]int32 `json:"spent"`    // talentID -> rank
+    Prestige int32            `json:"prestige"` // prestige level (0 = none)
+}
+```
+
+Legacy characters load with the zero value (`Points: 0`, `Spent: nil`, `Prestige: 0`); `EnsureTalents()` lazily initializes the spent map on write, and `TalentRank()`, `SpendTalent()`, `CanLearnTalent()`, `PrestigeMultiplier()` and `ApplyPrestige()` (`pkg/entities/characters/talents.go`) all treat nil as empty.
+
+### Talent catalog (`pkg/talents`)
+
+Pure data package: id, name, category, effect, per-rank amount, allowed schools, description. 12 talents in 3 categories; one deterministic effect per talent so application order is irrelevant.
+
+| ID | Name | Category | Effect | Amount/rank | Schools |
+|----|------|----------|--------|-------------|---------|
+| `talent_power_strike` | Golpe Poderoso | offensive | basic attack damage | +5% | martial |
+| `talent_critical_eye` | Ojo Crítico | offensive | crit chance | +2% | martial, shadow |
+| `talent_mana_surge` | Oleada de Maná | offensive | spell damage | +10% | fire, ice, arcane |
+| `talent_iron_skin` | Piel de Hierro | defensive | damage reduction | +3% | martial, ice |
+| `talent_endure` | Resistencia | defensive | max HP | +5% | martial, divine, fire, ice, arcane, nature |
+| `talent_shield_master` | Maestro Escudo | defensive | block chance | +2% | martial, divine |
+| `talent_wind_step` | Paso del Viento | utility | initiative | +1 | martial, shadow, nature |
+| `talent_second_wind` | Segundo Aire | utility | stamina regen | +1 | martial, nature |
+| `talent_spell_momentum` | Impulso Arcano | utility | spell cooldown | -5% | arcane, fire, ice |
+| `talent_healer_gift` | Dón Sanador | utility | heal output | +5% | divine, nature |
+| `talent_shadow_step` | Paso Sombrío | utility | evasion | +2% | shadow |
+| `talent_nature_bond` | Vínculo Natural | utility | potion strength | +5% | nature |
+
+API: `All()` (stable order), `Lookup(id)` (case-insensitive, also accepts the id without the `talent_` prefix), `ForSchool(school)`, `Available(school, id)`, `IDs(defs)`.
+
+**Class gating** goes through `classkit.TalentsForClass(classID)` (`pkg/classkit/registry.go`): an explicit `talents:` list on the class YAML wins, otherwise the class offers every talent of its classkit `school`. No content-pack edit is required for the default case.
+
+### Applying effects
+
+`Character.ApplyTalentBonuses(&ds)` (called at the end of `DeriveStats`) walks `Talents.Spent`, looks each id up in `pkg/talents`, multiplies `Amount` by the rank and adds it to the matching `DerivedStats` field. Buying a rank therefore changes combat/derived values on the next `DeriveStats` call with no separate cache to invalidate.
+
+### Command: `talents`
+
+Registered as `talents` / `talent` (`commandprocessor.go:150`, `pkg/mudserver/game/commands/talents.go`):
+
+| Command | Behavior |
+|---------|----------|
+| `talents` or `talents list` | Unspent points, prestige line (when `Prestige > 0`, with the +XP%), and the class talents grouped by `OFFENSIVE` / `DEFENSIVE` / `UTILITY` with id, name, current rank and description |
+| `talents spend <talent>` | Buys one rank. Rejected in combat, for an unknown id/name (id, display name, or a unique prefix of either), for a talent the class cannot learn, or when `Points <= 0`. Persists through `CharactersService().Update` and pushes a `characterUpdate` message |
+
+Spending is blocked while `combatEngine.IsPlayerInCombat(char)`; the reply points at `talents list` and reminds the player that a point is earned every 5 levels.
+
+### Prestige
+
+- **Requirement:** level 50 (`leveling.MaxLevel`). `prestige` prints status at any time (`Current Prestige`, `Level: x / 50`, and — once eligible — what a reset grants); `prestige confirm` is refused below level 50 and while the character is in combat.
+- **`prestige confirm`** runs `ApplyPrestige()` (`pkg/entities/characters/talents.go`), which is irreversible: `ResetToLevelOne()` rewinds level → 1, XP → 0, attributes → class template base, unspent/spent attribute points → cleared, HP/mana pools → class base, hotbar → `skills.FillHotbar(classID, 1, nil)`; then `Talents.Prestige++` and `Talents.Points++`.
+- **Persist across prestige:** spent talents, prestige level, gold, inventory, equipped items, discoveries, friends, and `AllTimeStats`.
+- **Permanent bonus:** `PrestigeMultiplier() = 1 + 0.05 * Prestige` (+5% XP per prestige level), applied at every XP grant:
+  - combat share + first-kill XP — `pkg/mudserver/game/game_combat.go:1415`
+  - quest rewards XP — `pkg/service/quests.go:1086`
+  - gold is **not** multiplied.
+- Persisted through `CharactersService().Update`; the client gets a `characterUpdate` message with the new level, points, and prestige.
+
+### Content pack impact
+
+None. `import/adventure/` XP rewards and quest XP are transparent to the curve, the talent catalog, and the prestige multiplier; talents are filtered by class school, not by pack.
+
+---
+
+## Client UX Enhancements (Phases 3.2, 3.4, 3.7)
+
+### Command history + tab completion (3.2)
+
+`public/mud-client/src/game/commandHistory.js` is pure helpers (no Svelte, no DOM); persistence goes through an injected `Storage`-like object so tests can pass a fake and SSR/quota failures stay silent.
+
+- **History:** `pushHistory` appends with consecutive-dedup and a cap of `HISTORY_LIMIT = 50`; `createHistoryState` / `historyPrev` / `historyNext` / `resetHistoryCursor` implement ArrowUp/ArrowDown browsing that preserves the in-progress draft when you leave history; `loadHistory` / `saveHistory` round-trip `localStorage` under `talesmud_command_history`.
+- **Tab completion:** `filterCompletions`, `autocompleteSource`, and `tabComplete` complete the first token against known commands and later tokens against room player names. `GAME_COMMANDS` ships a static list (movement, perception/info, social + global channels, combat, items/world, party) so completion works before any server payload; the terminal widget merges in server-known commands when available.
+- **Wiring:** `widgets/TerminalXWidget.svelte` owns the draft/history state and calls the helpers directly (`createHistoryState`, `pushHistory`, `historyPrev`/`historyNext`, `loadHistory`/`saveHistory`, `tabComplete`). The desktop `widgets/TerminalWidget.svelte` gets the same behavior through `echo/LocalEchoController.js` → `echo/HistoryController.js`, and contributes its autocomplete sources (`GAME_COMMANDS` for token 0, room player names afterwards).
+- **Tests:** `src/game/commandHistory_test.mjs`, `src/game/HistoryController_test.mjs`.
+
+### Minimap exit legend (3.4)
+
+`public/mud-client/src/game/minimapDirections.js` turns server-emitted room exits into a compact direction strip for the minimap.
+
+- `DIRECTION_ORDER` (N/NE/E/SE/S/SW/W/NW/up/down/in/out), `DIRECTION_GLYPHS`, and `DIRECTION_ALIASES` (single letters, `upstairs`, `enter`, …) feed `normalizeDirection()` and `directionGlyph()`.
+- `buildExitLegend({ exits, places, visitedRooms })` returns `{ key, glyph, label, explored }` per exit, using the atlas discovery flags (`places[].discovered`) or locally visited rooms. Undiscovered or unknown targets render as `?` — nothing the server has not disclosed is invented.
+- **Wiring:** `widgets/MinimapWidget.svelte` renders an "Exits" strip from `exitLegend`.
+- **Tests:** `src/game/minimapDirections_test.mjs`.
+
+### Responsive layout (3.7)
+
+Phone-width media queries added to the play shell and overlays:
+
+| File | Breakpoint | Change |
+|------|-----------|--------|
+| `src/game/Game.svelte` | `max-width: 768px` / `420px` | `.gameContainer` padding tightened (mobile container keeps `padding: 0`) |
+| `src/game/ui/InventoryOverlay.svelte` | `max-width: 768px` | Full-width overlay panel, no side gutters, smaller radius |
+| `src/game/ui/QuestNotifications.svelte` | `max-width: 480px` | Notification stack pinned to the viewport with `min-width: 0` / `width: 100%` so it no longer forces a horizontal scrollbar |
+
+### Inventory weight display (3.5, parcial)
+
+- `game/inventoryEngine.js` — motor puro de inventario con helpers de peso (`carryWeight`, `isOverweight`, `canCarry`), `InventoryItem`, `InventoryEngine` (`addItem`, `removeItem`, `getSummary`, `findItemByName/Id`, `getEquippedItems`, `getGrayedSlots`, `onDirty`).
+- `game/ui/InventoryWidget.svelte` — muestra `totalCarriedWeight/maxWeight` con la clase CSS `overweight`; el overlay se alterna con la tecla `I` (`KEY_INVENTORY_QUICK` en `keyboardShortcuts.js`).
+- **Límite actual:** es **solo aviso visual**. `maxWeight` está fijo en 100 y nada lo sobreescribe; el servidor no emite `weight` por objeto (el contador se queda en `0/100`) y no hay encumbrance ni rechazo de `get`/`pickup` por peso.
+
+---
+
+## Phase 6 LLM Integration (Design And Foundation)
+
+**Status (2026-11-01):** diseñado en [`docs/design/PHASE6_LLM.md`](docs/design/PHASE6_LLM.md) (§0–6.7) y parcialmente implementado en el árbol de trabajo (sin commitear). FASE 6.3 runtime —incluidos mecanismos B/C— está cableada; otros bloques de Fase 6 permanecen en curso:
+
+- **Cut A — generación de personaje:** `pkg/server/handler/generate.go` renderiza prompts de `llmprompt` a través de `llmgen.Pipeline` (`POST /api/generate/character`).
+- **B16 — endpoints creator:** `pkg/server/handler/llm.go` con `POST /api/creator/llm/quests/generate` (dry-run por defecto), `POST /api/creator/llm/quests/contextual`, `POST /api/creator/llm/rooms/:id/description` (preview, no persiste) y `GET/POST /api/creator/llm/prompts` (+ `/prompts/:id/test`).
+- **B16/B24 — narrador DM (FASE 6.5, modo A):** ver el bloque "Dungeon Master AI (FASE 6.5, modo A)" más abajo.
+- **B18 — quests contextuales en juego:** comando `offer <npc>` / `offer accept|decline` sobre `llmgen.GenerateContextualQuest` (ver "Contextual Quest Offers" en Quest System).
+- **B25–B29 — NPC runtime (FASE 6.3, cortes 1+2+3 y mecanismos B/C):** `ask <npc> [pregunta]`, memoria persistente con resumen LLM, personalidad Big5/objetivos/secretos/relaciones y guard de secreto literal; config por YAML/REST/NPC factory y herencia al spawn; opciones accionables, relación dinámica y feedback. Batch 29 completa el auto-saludo de `talk` (prioridad diálogo autoral → quest → LLM), la continuación por texto libre de una conversación `__llm__` activa/reciente y `kind=quest:<id>` validado. La plantilla `npc.dialogue` v1.0.3 contiene quests disponibles; el modelo no puede crear quests. El cliente expone input libre mediante `DialogMessage.FreeText`.
+
+**Pendiente:** FASE 6.5 modo B (`DMDecision` + eventos ambush/environmental); para FASE 6.3, el anillo de memoria corta, guardrails completos de combate y `FallbackDialogID` como fallback de error. El `talk` autoral y sus quests mantienen prioridad sobre el saludo LLM.
+
+El texto histórico de los Batches 25–27 que aparece más abajo describe el estado de cada batch en su fecha; el estado vigente tras el Batch 29 es el resumido aquí y en la subsección de deuda anterior.
+
+### NPC runtime dialogue (`ask` y `talk`, FASE 6.3 cortes 1+2+3 + mecanismos B/C — Batches 25–29)
+
+Pregunta libre a un NPC que responde el LLM con la personalidad de ese NPC y opciones accionables; también permite un saludo desde `talk` cuando no hay diálogo autoral ni quests disponibles y continuación por texto libre en una conversación LLM reciente. **Prioridad de `talk`: diálogo autoral → quests → LLM.** La generación no puede crear quests: las opciones `quest:<id>` se limitan a acciones actualmente disponibles. Verificado contra el código 2026-11-01; sin commitear.
+
+- **Comando:** `ask <npc-name> [question]` (`pkg/mudserver/game/commands/ask.go`, registro en
+  `commandprocessor.go` **sin alias**; la pregunta es opcional — sin ella es un saludo). Resuelve el
+  prefijo de nombre más largo del NPC en la sala (`resolveAskTarget`, tolera `ask to …`).
+- **Degradación (siempre responde alguien):**
+  - NPC **sin** `llm.enabled` (`npc.LLMEnabled() == false`, incluye NPCs legados con `LLM == nil`) →
+    aviso *"<name> has no free-form voice; you speak with them the usual way."* y pasa al diálogo
+    **autoral** vía `talkToNPC` (función extraída de `commands/talk.go` y compartida con `talk`).
+  - Sin proveedor LLM instalado / IDs faltantes (`NPCDialogueDisabled`) → aviso
+    *"<name> cannot answer freely right now; you speak with them the usual way."* + `talk`.
+  - Cooldown activo (`NPCDialogueRateLimited`) → *"<name> is still thinking about your last
+    question. Try again shortly."*; semáforo lleno (`NPCDialogueBusy`) →
+    *"<name> is busy with another question. Try again shortly."* (sin degradación).
+- **Orquestación (`Game.RequestNPCDialogue`, `pkg/mudserver/game/npc_dialogue.go`):** cooldown por
+  **personaje+NPC** (`npc.EffectiveCooldownSeconds()`, default **3 s**), semáforo de **2**
+  concurrencias y timeout de **20 s**; el trabajo LLM corre **fuera del bucle de juego** y el
+  resultado vuelve con `game.Call` (sin bucle vivo — tests/arranque — se ejecuta inline).
+- **Proveedor (`installNPCDialogueProvider`, `pkg/server/llm.go`):** no-op sin `llmgen.Pipeline`
+  activa. Genera con `TaskNPCDialogue` (`RequireLLM: true`, timeout 20 s), plantilla
+  `pkg/service/llmprompt/prompts/npc.dialogue.yaml` (v1.0.3) y payload JSON
+  `{reply, options[], end, relationDelta, memoryNotes[]}` (`relationDelta` declarado en el
+  template y acotado por el juego a ±0.05); `Temperature` de la petición **sobreescribe** la 0.8 del
+  prompt cuando `LLM.Temperature > 0`. `npcLLMConfig` resuelve la config viva (instancia primero,
+  luego su plantilla) y `formatNPCPersonalityContext` renderiza los bloques del corte 2 en las
+  variables del prompt `personality`, `goal`/`goals`, `secrets` y `relations`; el system prompt del
+  template usa el tono de los Big5/goals y **ordena no revelar los secretos literalmente** (solo
+  indirectas, y solo con alta confianza). Tras validar (reply no vacío ≤ 400 runes, ≤ 4 opciones con
+  `kind ∈ {flavor, end}`, ≤ 8 `memoryNotes` de ≤ 200 runes; en el corte 2 también anti-fuga
+  literal de secretos) aplica el filtro de contenido `OutputAllowed` y registra el turno de memoria.
+  `AvailableQuestPromptContext` proporciona la lista contextual de quests disponibles y la allowlist
+  de IDs al prompt/validador; `kind=quest:<id>` se acepta solo para esos IDs.
+- **Entrega (`deliverNPCDialogue`, cortes 1–3 + Batch 29):** reply sanitizado (≤ 400 runes) y opciones
+  normalizadas (`normalizeNPCDialogueOptions`: hasta 4, `kind ∈ {flavor, end, quest:<id>}`, label ≤ 120 runes)
+  y enriquecidas con `mapNPCDialogueOptions`/`matchAuthoredDialogLabel`, que compara cada label con
+  el nombre/texto/textos alternativos/opciones de los nodos del diálogo autoral del NPC (instancia →
+  plantilla → `llm.FallbackDialogID`) y guarda `NodeID` + índice original cuando coincide. Si hay
+  Conversation Service, `sendNPCDialogueDialog` abre/actualiza una conversación con el **`DialogID`
+  centinela `"__llm__"`** (`def.NPCDialogueDialogID`), guarda las opciones en `context`
+  (`LLM_OPTIONS`, sin migración), engagea la sesión NPC (`EngageNPC(…"dialog")`) y manda un
+  `messages.NewDialogMessage` con opciones numeradas (`Index = i+1`, `Username = <nombre del NPC>`);
+  sin servicio de conversación cae al texto plano `- label` del corte 1. En error/timeout/salida
+  filtrada manda la línea neutra *"<NPC> te mira en silencio."* (`neutralNPCDialogueReply`).
+- **Selección de opción (cortes 3 + Batch 29):** `dialog_select.go` ignora conversaciones con `DialogID` vacío
+  (una sesión NPC abierta no reactiva opciones ya cerradas) y enruta `DialogID == "__llm__"` a
+  `handleLLMDialogSelection` (`pkg/mudserver/game/commands/llm_dialog.go`, nuevo): `end` cierra
+  conversación y sesión NPC (`NewDialogEndMessage` + `closeLLMDialogConversation`); una opción con
+  `NodeID` continúa el árbol autoral vía `talkToNPCAt` (`commands/talk.go`), que voltea la misma
+  conversación de `__llm__` al `DialogID` autoral con `CurrentNodeID = startNode`; cualquier otra es
+  un seguimiento `flavor` lanzado con `buildNPCDialogueRequest(..., continuation = true)`
+  (`npcDialogueAllow` permite a un `Continuation` saltar el rechazo por cooldown refrescando la
+  ventana; el semáforo de 2 sigue aplicando). Índice fuera de rango → *"Invalid option. Please
+  choose 1-N"* sin cerrar las opciones. `quest:<id>` se procesa antes de `NodeID`, se vuelve a
+  resolver contra las opciones disponibles y delega en `handleQuestDialogOption`; si ya no está
+  disponible, informa al jugador y no muta el estado de quest. El cliente envía `String(option.index)`.
+- **Relaciones dinámicas (corte 3):** el payload puede traer `relationDelta`, acotado por
+  `npc.ClampRelationDelta` (±0.05 por intercambio) y persistido con
+  `NPCMemoriesService.AdjustRelation` → `npc.ApplyRelationDelta` en `NPCMemory.Relations`
+  (`map[character]float64`, acumulado clampado a [-1,1], dentro del JSON de `npc_memories` —
+  **sin migración**). Si el modelo no sugiere delta el default es **+0.02** (0 cuando la opción es
+  `end`). `mergeDynamicRelations` lo inyecta al prompt como `player(dinámica,0.04)` sustituyendo la
+  entrada estática `player`.
+- **Feedback en el cliente (corte 3, frontend):** `public/mud-client/src/game/relationFeedback.js`
+  extrae la pista de relación del payload (tolerante a `relation`, `relationDelta`, `relationLabel`,
+  before/after), `Client.js` añade la línea entre corchetes y pasa el quinto argumento a
+  `mux.setDialog`, `MUDXPlusStore.dialogRelation` la conserva y `DialogOverlay.svelte` dibuja una
+  fila sutil ▲/▼/• (wired desde `RoomWidget.svelte` y `MobileRoomView.svelte`). **Solo se pinta si
+  el mensaje trae información de relación**; es puramente cosmético.
+- **Rate limit del pipeline:** además del cooldown del juego, cada llamada pasa por el `Limiter` de
+  `llmgen` con la clave `npc:<npcID>:<characterID>` (`LLM_RATE_PER_HOUR`, **10/h** por defecto);
+  agotada la cuota, `RequireLLM` devuelve `ErrRateLimited` y el jugador recibe **la misma línea
+  neutra** (no un aviso de espera). Las respuestas en caché (30 min) no consumen cuota. El pipeline
+  tiene además su propio semáforo (2 en paralelo, espera máx. 2 s).
+- **Invariante de estado:** `ask` y la generación de respuestas/opciones no mutan combate,
+  inventario, sala ni quests; las escrituras propias de diálogo LLM son las filas de `npc_memories`.
+  Al elegir expresamente un `kind=quest:<id>` validado sí se ejecuta la acción de quest existente.
+
+#### Config por NPC (`npcs.data.llm`, campo JSON nuevo sin migración)
+
+| Campo | Default | Uso real hoy |
+|---|---|---|
+| `Enabled` | `false` | Único gate: sin él `ask` degrada a `talk` |
+| `Persona` | — | 1–3 frases en primera persona; va al prompt (`vars.persona`) |
+| `Voice` | — | Registro ("brusco", "anciano"); va al prompt (`vars.voice`) |
+| `Temperature` | 0 → 0.8 (prompt) | Override por petición en `pipeline.Generate` |
+| `MemoryTurns` | 0 → 8 (`EffectiveMemoryTurns`) | Ventana de **facts** inyectados al prompt (últimos N); el umbral de resumen lo fija `NPCMemoryConfig.SummaryAtTurns` (8) del servicio |
+| `FallbackDialogID` | — | **Batch 27:** leído como **fuente secundaria del diálogo autoral** al mapear los labels de las `options` (`npcDialogueAuthoredDialogID`); sigue **sin ser** el fallback de error — ese papel lo tiene la línea neutra |
+| `CooldownSeconds` | 0 → 3 (`EffectiveCooldownSeconds`) | Ventana del cooldown por (personaje, NPC) |
+| `Personality` (`LLMPersonality`) | — | **Batch 26.** Big5 — `openness`, `conscientiousness`, `extraversion`, `agreeableness`, `neuroticism`, cada uno en `[0,1]` — al prompt (`vars.personality`, p.ej. `apertura:0.40, responsabilidad:0.90, …`); helpers `EffectivePersonality()`/`HasPersonality()` |
+| `Goals` (`[]string`) | — | **Batch 26.** Objetivos del NPC al prompt (`vars.goal`/`goals`) |
+| `Secrets` (`[]string`) | — | **Batch 26.** Secretos al prompt (`vars.secrets`) con la instrucción de no revelarlos **literalmente**; un reply que los reproduce palabra por palabra se rechaza (`secret_leak`) y se reintenta con feedback |
+| `Relations` (`[]LLMRelation`) | — | **Batch 26.** `{Target, Kind ∈ {ally, rival, family, faction, mentor}, Sentiment ∈ [-1,1]}` — p.ej. `player(mentor,0.70)` — al prompt (`vars.relations`); `Target: "player"` = la relación con quien pregunta |
+
+**Tres vías de autoría (Batch 26):** (1) **YAML importer** — `importer.YAMLNPC.LLM` (tags
+camelCase) deep-copiado al entity por `ToEntity()` (`converters.go`); (2) **NPCTemplate REST** —
+el campo `llm` va en el detail DTO y en el upsert de `handler/npc_templates.go` (`Clone()` en
+ambas direcciones; las lecturas `GET` son solo autenticadas, y `llm.secrets` se **redacta** salvo
+para creators/admins — `canViewNPCTemplateSecrets`, fail-closed, observación QA B26 cerrada);
+(3) **NPC factory UI** del play client (panel "Dialogue / LLM", tecla
+N, `NpcFactory.svelte` + `normalizeLLM` en `npcFactory.js`). Los NPCs creados por spawner
+**heredan la config de la plantilla** vía `template.LLM.Clone()` en `SpawnFromTemplate`
+(`pkg/service/npcs.go`), de modo que una instancia no puede mutar los goals/secretos/relaciones de
+la plantilla. El contenido incluido trae un ejemplo: **Master Aldric** (`TUT_MENTOR`,
+`import/adventure/data/npcs/tut_mentor.yaml`) con `llm.enabled: true`, Big5, 2 goals, 1 secret y
+relación `player/mentor` 0.7 (`import/adventure` está en `.gitignore`, así que el ejemplo vive en
+el árbol de trabajo, no en git).
+
+#### Memoria persistente (`npc_memories`)
+
+- **Tabla** `npc_memories` `(id, data JSON)` (migración `migratePhase6NPCMemories()` en
+  `pkg/db/sqlite/sqlite.go`); clave determinista `<npcTemplateID>::<characterID>` (`MemoryID`,
+  `pkg/repository/npc_memory.go`) — nunca se clave por ID de instancia.
+- **Entidad** `repository.NPCMemory{Summary, Facts[], Turns, LastUserLine, SummarySource, Relations map[string]float64, Updated}` — `Relations` (Batch 27, dentro del blob JSON **sin migración**) guarda la relación acumulada por NPC↔personaje (clave en minúsculas, p.ej. `master aldric`; por defecto `player`), clamp [-1,1] con `npc.ApplyRelationDelta`/`AdjustRelation`;
+  repo `pkg/repository/npcmemories_sqlite.go` + servicio `NPCMemoriesService`
+  (`pkg/service/npcmemories.go`, expuesto en el facade). `SummarySource` (`""` legado |
+  `"deterministic"` | `"llm"`, dentro del blob JSON — **sin migración**) marca la procedencia del
+  resumen: escrito por el summariser LLM (`"llm"`) o editado externamente, `RecordTurn` lo
+  **preserva** y no lo reconstruye de forma determinista; los turnos posteriores solo reescriben
+  `Summary` cuando el guardado es `"deterministic"`/legado.
+- **Por turno** (`recordNPCMemoryTurn` → `RecordTurn`): suma turno (cap 50), fusiona/dedupe hechos
+  (cap 24, máx. 200 runes c/u), guarda la última pregunta (200 runes) y, al cruzar el umbral de
+  8 turnos, reconstruye `Summary` de forma **determinista** (concatena hechos + última pregunta; cap
+  400 runes) salvo que el resumen deba preservarse (ver `SummarySource`).
+- **Resumen LLM asíncrono (corte 2):** `triggerNPCMemorySummaryIfNeeded` (`pkg/server/llm.go`)
+  dispara tras cada turno registrado, en una goroutine fire-and-forget (ctx 12 s), cuando
+  `Turns % SummaryAtTurns() == 0`: llama a `llmgen` con `TaskNPCMemorySummary` (plantilla
+  `pkg/service/llmprompt/prompts/npc.memory_summary.yaml`, temperatura 0.2, `RequireLLM: false`,
+  sin caché, limit key `npcmem:<npcID>:<characterID>`) alimentado con nombre/persona del NPC,
+  facts, última pregunta y el resumen existente; el modelo devuelve `{"summary": "…"}` cap 400
+  runes. Output vacío/fallido → el resumen determinista sigue; éxito → recarga la fila (evita
+  pisar turnos concurrentes) y guarda con `SummarySource = "llm"`. La caché del task
+  `npc.memory_summary` tiene TTL 0 (no cachea).
+- **Siguiente pregunta** (`loadNPCMemoryFull` → `Get` → `formatNPCMemoryLimited`): inyecta
+  `summary` + los últimos `EffectiveMemoryTurns()` facts + `Última pregunta: …` en la variable
+  `memory` del prompt (más nombre/persona del NPC, sala, nombre/nivel del jugador y la pregunta,
+  declarada `untrusted: true` y cap 200 runes).
+- **Tests:** `pkg/mudserver/game/commands/ask_test.go` (7 tests: degradación sin LLM/proveedor,
+  llamada al proveedor + entrega, pregunta vacía, rate limit por personaje+NPC, NPC inexistente,
+  error del proveedor sigue respondiendo), `pkg/server/llm_npc_test.go` (8 tests: registro de
+  memoria, fallback neutro, rechazo de reply vacío, memoria entre turnos, secretos pasados al
+  prompt, rechazo de fuga literal de secretos, y el guard sobre `options`/`memoryNotes` — validator
+  y payload), `pkg/service/npcmemories_test.go` (3 tests: reconstrucción determinista, preservación
+  de resumen LLM, preservación de resumen externo sin marcador), `pkg/importer/llm_yaml_test.go`
+  (YAML camelCase → deep copy en el entity) y `pkg/server/handler/npc_templates_test.go`
+  (`TestNPCTemplateGetRedactsSecretsForNonCreators`); tests del corte 3:
+  `pkg/mudserver/game/commands/llm_dialog_test.go` (5: `flavor` → seguimiento con `Continuation`,
+  `end` cierra, selección desconocida mantiene las opciones, opción mapeada continúa nodo autoral,
+  conversación cerrada no la reactiva una sesión NPC abierta), `TestMatchAuthoredDialogLabelFindsNodeAndOption`
+  (`npc_dialogue_test.go`), `TestAdjustRelationClampsAndPersists` (`service/npcmemories_test.go`),
+  `TestInstallNPCDialogueProviderAdjustsRelation` (`server/llm_npc_test.go`: delta 0.04 persistido,
+  prompt con `player(dinámica,0.04)`, clamp de −0.20 a −0.01) y
+  `public/mud-client/src/game/relationFeedback_test.mjs` (frontend). QA: Batches 25/26 verificados
+  (el 26 **con observaciones menores, ya cerradas** — `llm.secrets` se redacta en GET de plantillas
+  para no-creators y el anti-fuga cubre `reply`, `options[].label` y `memoryNotes`) y **Batch 27
+  APROBADO CON OBSERVACIONES** (2026-10-30): única observación no bloqueante ajena al batch, el test
+  de combate intermitente `TestWardGritAndRetaliate` (`pkg/mudserver/game/combat/ward_test.go:111`,
+  "tiny hit 2" — los tests de guardia `TestWardGuard*` del mismo fichero pasan), 0 `DATA RACE`;
+  sin sección propia en `docs/qa/REGRESSION_REPORT.md`.
+
+#### Estado y deuda de FASE 6.3 tras los cortes 1–3 y Batch 29
+
+- **Implementado en Batch 29:** mecanismo B de saludo LLM en `talk` únicamente cuando no hay
+  diálogo autoral ni quests disponibles; mecanismo C de texto libre en conversación `__llm__`;
+  opciones `kind=quest:<id>` con allowlist contextual; contrato de `DialogOption.Kind` y
+  `DialogMessage.FreeText` e input libre en `DialogOverlay`.
+- Prioridad de `talk`: **diálogo autoral → quests disponibles → LLM**. Si el proveedor está
+  deshabilitado, conserva el mensaje actual de NPC sin diálogo. La intercepción solo aplica a un NPC
+  LLM habilitado, vivo y en la misma sala, con sesión dialog abierta o interacción de menos de 60 s;
+  la conversación se cierra al programar la continuación, no ante `RateLimited`, `Busy` o `Disabled`.
+- El proveedor calcula `AvailableQuestPromptContext` para el prompt `npc.dialogue` v1.0.3 y valida
+  los IDs contra esa allowlist. El modelo solo elige acciones de quest existentes/disponibles, no
+  crea quests. En selección se vuelve a resolver la disponibilidad y se reutiliza
+  `handleQuestDialogOption`; quest inexistente/no disponible no muta estado.
+- Pendientes: `llm_npc_session.go` (anillo de ventana corta) y guardrails completos de combate;
+  no se debe inferir de los checks de texto libre que toda interacción en combate esté bloqueada.
+- Caché del pipeline para `npc.dialogue` (30 min, `llmgen/config.go`): puede repetir la misma
+  respuesta ante un prompt idéntico.
+- `FallbackDialogID`: solo como **fuente secundaria del diálogo autoral** al mapear labels de
+  opciones (corte 3); el fallback de error sigue siendo la línea neutra.
+- Anti-fuga de secretos: el guard cubre `reply`, `options[].label` y `memoryNotes` (la
+  observación QA B26 que lo limitaba a `reply` quedó **cerrada**); las paráfrasis/insinuaciones no
+  se rechazan (solo la divulgación literal).
+- El error/timeout/filtro sigue usando la línea neutra; `FallbackDialogID` no está implementado como
+  fallback de error. `talk` mantiene el flujo principal autoral y de quests; `ask` es complementario.
+- **Contrato de opción de quest:** el selector del diálogo LLM conserva `Kind=quest:<id>`; al
+  seleccionarlo, el servidor revalida la disponibilidad actual y delega en el mismo manejador que
+  las opciones de `talk`. No se crean definiciones de quest a partir de texto del modelo.
+
+### Dungeon Master AI (FASE 6.5, modo A — Batch 24)
+
+Narrador reactivo en **prosa** que comenta eventos del juego y **nunca muta estado** (diseño `docs/design/PHASE6_LLM.md` §6.5, nota "Implementado (Batch 24, modo A)"). Verificado contra el código 2026-10-22; sin commitear.
+
+- **Bus de eventos tipado:** `def.DMEvent{Kind, RoomID, CharacterID, UserID, Facts}` (`pkg/mudserver/game/def/gamectrl.go`), publicado vía `GameCtrl.NotifyDM`. `Kind ∈ {combatStart, combatEnd, questCompleted, levelUp, roomEnter}`.
+- **Núcleo:** `pkg/mudserver/game/dm_narrator.go` — `DMNarrationRequest`, `DMNarratorFunc`, `SetDMNarrator`, `DMNarratorEnabled`, `TriggerDMNarration`, `NotifyDM` (adapta `DMEvent` → request; parsea `Facts`), `dmAllowRoom`/`dmAllowUser`/`dmAllowGlobal`, `dmPartySize` (fiesta + followers reales, dedup), `dmRoomName`, `cleanDMText` (trim, colapsa saltos, ≤240 runes). Tests: `dm_narrator_test.go`.
+- **Hooks (los 5 eventos):**
+  - `combatStart` → `game_aggro.go:571` (tras `BeginEngagement`; NPCName, Round, PartySize) — audiencia Room.
+  - `combatEnd` → `game_combat.go:1187` (`cleanupCombatInstance`; Outcome, Round, PartySize, nombre del primer enemigo) — Room.
+  - `questCompleted` → `commands/dm_notify.go` (desde `questcommand.go:264` y `dialog_select.go:417`; `questName`) — **User** (privado).
+  - `levelUp` → `commands/dm_notify.go` (desde `level_up_notify.go:19`; `level`) — **User**.
+  - `roomEnter` → `commands/room_takeexit.go:113`, **solo al cambiar de `Area`** (`roomName`, `area`) — Room.
+- **Flujo (nunca en el tick, nunca muta):** hook → `NotifyDM` → throttles (cooldown por sala/usuario 45 s + presupuesto global 10/min) → semáforo de 2 → goroutine con ctx 8 s, 1 intento → `llmgen.Pipeline` (`TaskDMNarration`, `RequireLLM: true`) → filtro `OutputAllowed` + `cleanDMText` → resultado vuelve por `game.Call` → mensaje `Username: "DM"` a la sala o al usuario. Audiencia global rechazada.
+- **Fallback = silencio:** sin proveedor, con error/timeout, o si el filtro descarta la línea → no se emite nada (`llmgen/fallback.go` devuelve vacío para `TaskDMNarration`; `fallback: ""` en la plantilla; `RequireLLM` impide prosa determinista).
+- **Plantilla:** `pkg/service/llmprompt/prompts/dm.narration.yaml` (una frase corta en español, sin mecánicas ni ids; temperatura 0.9, maxTokens 120, retry 0).
+- **Instalación:** `pkg/server/llm.go` (`installDMNarrator`, no-op sin proveedor o con `LLM_DM_ENABLED` off) → `server.go` al cablear el juego vivo.
+- **Config (`LLM_DM_*`):** `LLM_DM_ENABLED` (kill switch, default 1), `LLM_DM_COOLDOWN_SECONDS` (default 45), `LLM_DM_TIMEOUT_SECONDS` (default 8), `LLM_DM_MAX_PER_MIN` (default 10) — en `.env.example:95-106` y `docker-compose.yml:36-39`; leídas en `game.go:148-176`.
+- **Bugs corregidos en el corte:** `Round` (antes 0 → ahora `instance.Round`), `PartySize` (antes solo `len(Players)` → ahora `dmPartySize` con fiesta + followers reales) y `RoomName` (lookup `dmRoomName` + repetición en el proveedor).
+- **Pendientes:** modo B (`DMDecision` con whitelist de acciones + `hold` por defecto), eventos ambush/environmental, métricas de líneas emitidas/descartadas, tono por zona. QA: **§B24 verificado (APROBADO, 2026-10-22)**.
+
+Lo que ya existía y se reutiliza tal cual (la regla del diseño es "construir sobre `llm.Client`, nunca reemplazarlo"):
+
+- Contrato `llm.Client` (`Complete(ctx, systemPrompt, userPrompt, temperature)`) + factory `NewFromEnv()` en `pkg/service/llm`, providers `pkg/service/ollama` (por defecto) y `pkg/service/groq`.
+
+Paquetes presentes en el árbol de trabajo (sin commitear):
+
+| Package / artifact | Role | State (2026-10-19) |
+|--------------------|------|---------------------|
+| `pkg/service/llmopts` (new) | Provider-agnostic `Options{Temperature, MaxTokens}`; `llm.Options` is an alias of it. `CompleteWith(ctx, system, user, Options)` is implemented by both providers, so `max_tokens` is no longer fixed at 300 (0 still means the provider default of 300) — this is the design's additive §6.2 extension | present; imported by `llm`, `ollama`, `groq` |
+| `pkg/service/llmprompt` (new) | Versioned YAML prompt templates (`prompts/<task>.yaml`, `//go:embed`) + `text/template` rendering (`prompt.go`, `registry.go`, `prompts/`: `character.name`, `character.description`, `npc.dialogue` (v1.0.3, incl. available quests, personality/relations and `relationDelta`), `npc.memory_summary` (Batch 26), `quest.generate`, `room.description`, `dm.narration`) | present; consumed by `llmgen` and by `pkg/server/llm.go` / `handler/generate.go` (`LLM_PROMPT_DIR` overrides the embed dir) |
+| `pkg/service/llmgen` (new) | Generation pipeline (`pipeline.go` + `pipeline_test.go`) and building blocks (cache, config, deterministic fallback, content filter, limiter, parse, stats, world `catalog`) plus `questgen.go` / `questgen_context.go` | present; consumed by `handler/generate.go`, `handler/llm.go` y el proveedor del comando `offer` instalado en `pkg/server/llm.go` |
+| `npc_memories` table + `pkg/repository/npc_memory.go`, `npcmemories_sqlite.go` (+ tests), `Factory.NPCMemories()`, `pkg/service/npcmemories.go` (`NPCMemoriesService` en el facade) | Long-term NPC memory store for §6.3, keyed `<npcTemplateID>::<characterID>`; migration `migratePhase6NPCMemories()` in `pkg/db/sqlite/sqlite.go`; since Batch 26 the rows carry `SummarySource` (`deterministic` \| `llm`, JSON blob — no migration) and since Batch 27 a `Relations` map (cumulative NPC↔player relation, [-1,1]) | present; **consumed by the game since Batch 25** (`loadNPCMemoryFull` / `recordNPCMemoryTurn` in `pkg/server/llm.go`, backing the `ask` command), **with async LLM summaries since Batch 26** (`triggerNPCMemorySummaryIfNeeded`, `TaskNPCMemorySummary`) |
+
+Pendientes del diseño:
+
+| Piece | Role |
+|-------|------|
+| Anillo de ventana corta (`llm_npc_session.go`) | Sigue pendiente. Los mecanismos B/C sí están implementados: `talk` puede saludar con LLM tras diálogo/quests, y el texto libre puede continuar una conversación `__llm__` reciente. |
+| `pkg/service/llmgen/dmdecision.go` | FASE 6.5 **modo B**: `DMDecision` (acción enum whitelist + target validado + flavor) y eventos ambush/environmental — diseño futuro |
+
+Cuts: **A** MVP (templates + pipeline + character generation) — **landed**; **B** NPC runtime LLM — **landed as cortes 1–3 plus mechanisms B/C in Batches 25–29** (`ask` + `npc_memories` + structured personality + async summaries + YAML/REST/UI config + actionable options + dynamic relations; `talk` priority authored dialog → quests → LLM greeting; raw-text continuation of recent `__llm__` conversations; validated `kind=quest:<id>` limited to available quest actions); **C** maturity (quest generator, DM AI, admin tools) — **landed in part** (`questgen`/`questgen_context`, DM mode A, `handler/llm.go`; DM mode B remains pending). NPC prompt validation/rate limits/content filter and literal-secret rejection are basic guardrails; complete combat guardrails and the short-term memory ring remain pending. `FallbackDialogID` only maps to authored dialog and is not an error fallback.
+
+Note: `docs/qa/REGRESSION_REPORT.md` corre hasta §B24 (2026-10-22). Batches 25–27 fueron verificados por QA con tests dedicados sin sección propia en el reporte; las observaciones B26 están cerradas y el B27 tuvo una observación de test intermitente de combate ajena al batch. Batch 29 está verificado por sus tests de prioridad/autosaludo, selección de quest, validación de IDs, texto libre y overlay descritos en el bloque NPC runtime.
+
+---
+
+## Estado actual — Batches 14–29 (corte 2026-11-01)
+
+Cada sistema vivo está documentado en su sección de arriba (Dungeon Builder,
+NPC Factory, Contextual Quest Offers, Fase 6, Client UX). Aquí solo queda lo
+que fue **decisión de batch y sigue vigente**. Todo verificado contra el árbol
+de trabajo sin commitear.
+
+### Cliente — atajos y paneles (Batch 15)
+
+- `Game.svelte` (`onShortcutKey`) cablea `C` (clanes), `M` (DMs), `K` (spellbook), `L` (editor de clases), `I` (inventario), `N` (NPC factory), `D` (dungeon builder), `A` (audit), `1`–`9` (hotbar), `Tab`/`Shift+Tab` (ciclar objetivo, solo con combate activo), `?` y `Escape`; nada se dispara con el foco en un campo de texto.
+- `ShortcutSheet.svelte` (hoja `?`) lista hoy `1`–`9`, Tab, C, M, K, L, I, N, D, A, Escape y `?`.
+
+### Base de datos — pool e índices (Batch 16, FASE 7.1 corte implementado)
+
+- `pkg/db/sqlite/sqlite.go`: pragmas (`_busy_timeout=5000`, `_journal_mode=WAL`, `_synchronous=NORMAL`) embebidos en el DSN para que **todas** las conexiones del pool los hereden; pool por defecto `SetMaxOpenConns(4)` / `SetMaxIdleConns(4)` (`DB_MAX_OPEN_CONNS`) y `SetConnMaxLifetime(5m)`. Antes: una sola conexión.
+- `migratePhase16Indexes()`: elimina el índice muerto `idx_characters_user` (apuntaba a `$.belongsUserID` cuando el campo real es `$.belongsUser`) y lo recrea bien; añade `idx_characters_name`, `idx_rooms_name`, `idx_rooms_area`, `idx_npc_spawners_room`, `idx_npc_spawners_template`, `idx_users_online`, `idx_users_refid`, `idx_users_username`. Idempotente y aditivo.
+
+### Seguridad (Batch 16, FASE 7.2 + hallazgo B19.4)
+
+- Auditoría estática → `docs/qa/REGRESSION_REPORT.md` §B16: **sin hallazgos de severidad alta**; condición del PASS: atender B16-F1/F2 (disponibilidad), cabeceras globales (F3), quitar orígenes loopback en producción (F4).
+- Endurecimiento presente en el árbol: `SecurityHeadersMiddleware` (`X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`; CSP solo en `/activate`), `http.Server` con timeouts explícitos (`newHTTPServer`, env `HTTP_READ_HEADER_TIMEOUT`/`HTTP_READ_TIMEOUT`/`HTTP_WRITE_TIMEOUT`/`HTTP_IDLE_TIMEOUT`; por defecto 5s/15s/30s/60s) y fetch JWKS acotado (`JWKS_TIMEOUT_SECONDS` 10s + cuerpo limitado a 1 MiB, `pkg/server/auth.go`).
+- **Riesgo medio (§B19.4):** `authLimiter` (12 registros/min/IP) usa `c.ClientIP()` y `TrustedProxies()` por defecto confía en `X-Forwarded-For` de loopback → cualquier proceso local puede rotar XFF y obtener presupuesto ilimitado de auth. En despliegue real: exponer el puerto solo a procesos de confianza o un proxy con `TRUSTED_PROXIES` explícito (`pkg/server/trusted_proxy_test.go` cubre el lado opuesto).
+
+### QA — regresión, balance, carga (Batches 14–21; P0 cerrado en B21; race cerrada en B23)
+
+- Batches 14–19: build Go EXIT 0, suite Go 0 FAIL, `npm run build` EXIT 0 en todos los cortes. Los 2 fallos de tests frontend de entorno (Node 18 WebSocket, canvas) son preexistentes.
+- **B15** (readiness de carga) y **B16** (seguridad): PASS con condiciones. **B17** balance: `docs/qa/BALANCE_ANALYSIS.md` (solo lectura). **B18**: harness `tools/loadtest` + combat sims.
+- **B19 (carga real 100–500):** 100 conexiones sanas (heartbeat de 60 s verificado con corrida de 75 s, 99.96 % de respuestas); **≥200 conexiones wedgeaban el servidor de forma permanente** hasta el reinicio. Herramienta: modo `-mint` de `tools/loadtest` (`mint.go` acuña N session JWTs con pacing o IPs sintéticas `10.x.y.z` vía `X-Forwarded-For`; tests `mint_test.go`).
+- **P0 (cerrado — fix en Batch 20, Backend; verificado por QA en B21):** deadlock autoinfligido del bucle de juego — `handleUserJoined` enviaba bloqueantemente a `onMessageReceived` (buffer 20, `game.go`) desde la única goroutine consumidora, y la cascada en `mudserver.go` congelaba todos los read loops WS. Causa raíz y evidencia en `docs/qa/REGRESSION_REPORT.md` §B19; recomendaciones de §B19.7 **ya implementadas** en B20 (ver el bloque "Batch 20 — Backend" más abajo). Evidencia de cierre (§B21): 200/300/500 × 2 corridas × 80 s, `recv == sent`, **0 `msgErrors`** en 6/6, sonda post-carga sana. Mitigados en B20: §B19.6-1 (escrituras SQLite por mensaje) y §B19.6-2 (transporte WS sin write deadline); **sigue abierto** §B19.4 (bypass de rate-limits por `X-Forwarded-For` de loopback).
+- **Regresión detectada en B21 y corregida en B22:** leak de ~1 goroutine `writeLoop` por desconexión (§B21.5) — cerrado con transporte idempotente en `mudserver.go` + `transport_leak_test.go`.
+- **Race preexistente (cerrada en Batch 23):** el `*entities.User` compartido por el handler WS, el bucle de juego y `game_handlers` se mutaba sin sincronía (`IsOnline`/`LastSeen`/`LastCharacter`) mientras `UsersService().Update` lo serializaba a JSON → data race + snapshot mezclado persistido (reportada en §B22.4 como P2). **Corregida en Batch 23 (Backend)** con lock de presencia por usuario (`pkg/mudserver/game/presence.go`: `ApplyPresence`/`PresenceOf` + refcount), copia desligada `entities.User.Snapshot()` y test de regresión `pkg/mudserver/presence_race_test.go` → `0 DATA RACE` con `-race`. **Verificación QA §B23: `go test -race ./...` completo con 0 `DATA RACE`; el control negativo reproduce 6–19 warnings sin el lock, confirmando que el test detecta la race.**
+
+### Batch 20 — Backend (fix P0 de carga); Batch 21 — QA+Docs; Batch 22 — infra+Docs (19-oct-2026); Batch 23 — fix de la race de presencia (21-oct-2026)
+
+**Batch 20 — Backend (fix del P0 de carga, verificado contra el código):**
+
+- `pkg/mudserver/game/game_handlers.go`: `lc` y `selectcharacter` se procesan **inline** con `game.processIncoming(...)` en el bucle de juego (único consumidor de `onMessageReceived`); la restricción queda documentada en `pkg/mudserver/game/game.go` (`processIncoming`).
+- `pkg/mudserver/joinqueue.go` (nuevo) + `pkg/mudserver/mudserver.go`: cola FIFO no bloqueante de joins (`enqueueUserJoined` desde `attachSession`, nunca bloquea el read loop); una sola goroutine `forwardJoins` hace el hand-off bloqueante a `Game.OnUserJoined`; aviso de saturación a 64 y log de recuperación.
+- `pkg/mudserver/transport.go`: cola de salida por conexión (128) + `writeLoop` propio; `Send` encola y retorna; `SetWriteDeadline` de 10 s por frame → consumidor lento se desconecta en vez de bloquear broadcasts/pings.
+- `pkg/mudserver/game/sessions.go` + `pkg/mudserver/mudserver.go`: `LastSeen`/`IsOnline` se persisten solo en connect/disconnect (sin `UsersService().Update` por mensaje).
+- `cmd/tales/pprof.go` (+ `pprof_test.go`): pprof opcional (`ENABLE_PPROF`, `PPROF_ADDR`, por defecto `127.0.0.1:6060`).
+- Tests: `game/join_deadlock_test.go`, `mudserver/joinqueue_test.go`, `mudserver/presence_debounce_test.go`, `mudserver/transport_test.go`, `cmd/tales/pprof_test.go`.
+- Evidencia: load test 300 workers → 300/300 OK, 0 `msgErrors` (antes wedgeaba a ~200). **Estado: cerrado — re-verificado por QA en B21** (200/300/500 × 2 corridas sin wedge, 0 `msgErrors`).
+
+**Batch 20 — Docs (sincronización con los Batches 14–19, sin cambios en `pkg/**`, `public/**` ni `tools/**`):**
+
+- **`PROJECT.md`:** sección "Estado actual — Batches 17–19" (entonces "Batches 17–23", hoy "Batches 17–27"), estado de fases 5.1/5.3/6/7.1/7.2, roadmap actualizado, catálogo de endpoints con puntero a `docs/API.md` y apartado del P0 con enlace a `docs/qa/REGRESSION_REPORT.md` §B19 y §B19.7.
+- **`FEATURES.md`:** secciones nuevas "Dungeon Builder (Phase 5.1)", "Contextual Quest Offers (`offer` command)", "NPC Factory and Level Scaling" e "Inventory weight display (3.5)"; Fase 6 reescrita con lo cableado (B16/B18) y lo pendiente; afirmaciones obsoletas corregidas (hoja `?` con `I`/`D`, load test ejecutado, Dungeon Builder existente); esta sección consolidada reemplaza los apartados por batch.
+- **`ARCHITECTURE.md`:** ruta de datos de mazmorras, `npc_templates`, comando `offer`, fábrica de NPCs/escalado en cliente, facade/repos/tablas actualizados, entidades `Dungeon`/`NPCTemplate` y nota del P0 en el modelo de concurrencia.
+- **`docs/index.md`:** `qa/BALANCE_ANALYSIS.md` al índice, verificación B14–B19, fila 7.1 con el bloqueador y fila 7.3 (balance). **`README.md`:** enlaces de docs, árbol de carpetas y roadmap corregidos; bloque "Fork additions".
+- **P0 documentado en ese corte como "abierto, sin fix en `pkg/**`"** en `PROJECT.md`, `ARCHITECTURE.md`, `docs/index.md` y `README.md` — **corregido por el Batch 21** (carrera de cronología: el fix del Backend del mismo Batch 20 no estaba reflejado).
+
+**Batch 21 — QA + Docs (cierre del P0):**
+
+- **QA (§B21):** re-verificación de carga 200/300/500 × 2 corridas × 80 s → **P0 cerrado** (`recv == sent`, 0 `msgErrors`, sin wedge, heartbeat OK); detecta el leak de `writeLoop` (P2, §B21.5).
+- **Docs:** `PROJECT.md`, `ARCHITECTURE.md`, `FEATURES.md`, `README.md` y `docs/index.md` dejan de decir que el P0 está "abierto/sin fix": estado nuevo **"corregido en Batch 20 (Backend); pendiente re-verificación de carga por QA (B21)"** (posteriormente cerrado por el propio QA en §B21), conservando la traza histórica (qué, causa raíz, fix, archivos, §B19/§B19.7).
+- `docs/index.md` fila 7.1 actualizada; se consolida el estado "Batches 17–21" en los docs raíz (sin secciones de batch duplicadas).
+- **Nota operativa retirada en B22:** la advertencia de `git add -f` para `cmd/tales/pprof*.go` quedó obsoleta al corregirse `.gitignore` (`tales` → `/tales`).
+
+**Batch 22 — Backend/infra + Docs (19-oct-2026):**
+
+- **Fix de build crítico:** el `Makefile` compilaba `cmd/tales/main.go` como archivo suelto y desde el Batch 20 eso falla con `undefined: startPprof` → rotos `make build`, `make build-backend`, `make run-server`, `make run` y `make dev`. Los targets ahora compilan **por paquete**: `go build -buildvcs=false -o bin/tales ./cmd/tales`, `go build -buildvcs=false -o bin/dialog_sandbox ./cmd/dialog_sandbox`, `go run ./cmd/tales`, `go run ./cmd/dialog_sandbox`.
+- **`.gitignore`:** `tales` → `/tales` (solo el binario de la raíz); añadidos `bin/dialog_sandbox` y `/dialog_sandbox`. `cmd/tales/pprof.go` y `pprof_test.go` dejan de estar ignorados (verificado con `git check-ignore`): **ya no hace falta `git add -f`**.
+- **Fix P2 (leak de goroutines, §B21.5):** cierre idempotente del transporte en `pkg/mudserver/mudserver.go` — `HandleConnections` añade `defer connection.closeTransport(0, "")` y `handleConnectionClosed` llama a `connection.closeTransport(0, "")` (sync.Once en `wsTransport.Close`), de modo que `writeLoop` sale de su `select` al desconectar. Test: `pkg/mudserver/transport_leak_test.go` (ciclos de conectar/desconectar que exigen volver al baseline de goroutines).
+- **Docs (rol Docs):** comandos de build sincronizados (compilación por paquete + `-buildvcs=false` documentado) en `README.md`, `PROJECT.md`, `docs/fork-setup.md` y `docs/development/AGENTS.md`; P0 pasado a **cerrado — verificado por QA en B21** en `PROJECT.md`, `ARCHITECTURE.md`, `FEATURES.md`, `README.md` y `docs/index.md`; nota de `git add -f` retirada; Batch 22 y la race preexistente registrados.
+- **Pendiente conocido (resuelto en Batch 23):** la race en `attachSession`/`sessions.go` (`user.LastSeen`/`user.IsOnline`/`user.LastCharacter` sin sincronizar, detectada con `-race`, §B22.4) **quedó cerrada en Batch 23** — ver el bloque siguiente.
+
+**Batch 23 — Backend (fix de la race de presencia) + Docs (21-oct-2026):**
+
+- **Causa:** el mismo `*entities.User` era mutado sin sincronía por el handler WS (`attachSession`/`handleConnectionClosed`), el bucle de juego (`ConnectUserSession`/`DisconnectUserSession`/`SetUserSessionCharacter`) y `game_handlers` (`handleUserJoined`), mientras `UsersService().Update` serializaba ese struct a JSON → data race + snapshot mezclado persistido en SQLite (reportado por QA en §B22.4 como P2, no de B22).
+- **Fix (verificado contra el código):** lock de presencia por usuario con refcount — `pkg/mudserver/game/presence.go` (`presenceRegistry`, `ApplyPresence(user, mutate)`, `PresenceOf(user)`); copia desligada `entities.User.Snapshot()` (`pkg/entities/user.go`, copia también el `Entity` embebido) persistida **bajo el lock**, de modo que la fila serializada es siempre un snapshot consistente y el orden de los writes sigue el orden de las transiciones de estado. `def.PresenceState` + `GameCtrl.PresenceOf` (`pkg/mudserver/game/def/gamectrl.go`).
+- **Call sites migrados:** `pkg/mudserver/mudserver.go`, `pkg/mudserver/game/sessions.go`, `pkg/mudserver/game/game_handlers.go`, `pkg/mudserver/game/util/game_utils.go`, `pkg/mudserver/game/commands/select_character.go`, `pkg/presentation/doorview/view.go`.
+- **Invariante:** nada de mutar los campos de presencia de un `*entities.User` compartido fuera de `ApplyPresence`; toda lectura cross-goroutine pasa por `PresenceOf`.
+- **Semántica preservada (B19.6-1):** solo se persiste la transición offline→online / online→offline, no en cada input; el lock no cambia el debounce.
+- **Test:** `pkg/mudserver/presence_race_test.go` (`TestPresenceMutationIsRaceFree`: 50 rondas × 5 writers concurrentes sobre el mismo user; sin el lock falla bajo `-race`).
+- **Docs (rol Docs):** la race pasa de "pendiente" a **corregida en Batch 23** en `PROJECT.md`, `ARCHITECTURE.md` (Thread Safety: lock de presencia por usuario + invariante + recomendación de dueño único), `FEATURES.md`, `README.md` y `docs/index.md`; Batch 23 registrado con traza histórica.
+
+**Batch 24 — Backend (FASE 6.5, modo A — Dungeon Master AI) + Docs (22-oct-2026):**
+
+- **Qué es:** el narrador DM en prosa queda completo en **modo A** (solo comenta, **nunca muta estado**); se completó la implementación parcial previa y se corrigieron bugs (`Round`, `PartySize`, `RoomName`). Detalle completo en la sección "Dungeon Master AI (FASE 6.5, modo A)" de la Fase 6, más arriba.
+- **Archivos clave:** `pkg/mudserver/game/dm_narrator.go` (+ tests), `pkg/mudserver/game/def/gamectrl.go` (`DMEvent`/`NotifyDM`), hooks en `game_aggro.go`, `game_combat.go`, `commands/dm_notify.go`, `commands/room_takeexit.go`, `commands/level_up_notify.go`, `commands/questcommand.go`, `commands/dialog_select.go`; proveedor en `pkg/server/llm.go`; filtro/fallback en `pkg/service/llmgen/{filter,fallback}.go`; plantilla `pkg/service/llmprompt/prompts/dm.narration.yaml`; config `LLM_DM_*` en `.env.example` y `docker-compose.yml`.
+- **Guardrails vigentes:** cooldown 45 s por sala (y por usuario en eventos privados), timeout 8 s con 1 intento, presupuesto global 10/min, semáforo de 2 concurrencias, kill switch `LLM_DM_ENABLED`, filtro de salida (≤240 runes, sin ids sospechosos), audiencia Room/User con `Username: "DM"` (nunca global) y **fallback = silencio**.
+- **Pendientes:** modo B (`DMDecision`), eventos ambush/environmental, métricas; QA **§B24 verificado (APROBADO)**.
+- **Docs (rol Docs):** nota "Implementado (Batch 24, modo A)" en `docs/design/PHASE6_LLM.md` §6.5; `PROJECT.md` (roadmap Fase 6 + bloque "Batches 17–24"), `ARCHITECTURE.md` (subsystem DM: flujo evento → `NotifyDM` → throttles → goroutine → mensaje), `FEATURES.md` (esta sección + Last Updated), `README.md` y `docs/index.md`.
+
+**Batch 25 — Backend (FASE 6.3, corte 1 — NPC runtime LLM, comando `ask`) + Docs (22-oct-2026):**
+
+- **Qué es:** el jugador pregunta libremente a un NPC (`ask <npc> [pregunta]`) y este responde en persona vía el LLM, con memoria persistente por personaje; los NPCs sin `llm.enabled` (o sin proveedor instalado) siguen respondiendo por el diálogo autoral. **Nunca muta estado** (solo mensaje + fila de memoria). Detalle completo en el bloque "NPC runtime dialogue (`ask`, FASE 6.3 cortes 1+2+3)" de la Fase 6, más arriba (el corte 2 amplía este corte; los pendientes de abajo son los del momento del Batch 25).
+- **Archivos clave:** `pkg/mudserver/game/commands/ask.go` (+ `ask_test.go`, 7 tests), `pkg/mudserver/game/npc_dialogue.go` (orquestación: cooldown, semáforo, timeout, `game.Call`), `talkToNPC` extraído y compartido en `commands/talk.go`, proveedor `installNPCDialogueProvider` en `pkg/server/llm.go` (+ `llm_npc_test.go`, 4 tests), plantilla `pkg/service/llmprompt/prompts/npc.dialogue.yaml`, `pkg/entities/npcs/llm.go` (`LLMConfig`), `pkg/service/npcmemories.go` + `pkg/repository/npcmemories_sqlite.go` (tabla `npc_memories`) y registro en `commandprocessor.go` (sin alias).
+- **Guardrails vigentes:** cooldown por personaje+NPC (`LLM.CooldownSeconds`, default 3 s), semáforo de 2 concurrencias, timeout 20 s, trabajo LLM fuera del bucle de juego, rate-limit del pipeline por par npc+personaje (`LimitKey`, `LLM_RATE_PER_HOUR` 10/h → línea neutra al agotarse), validación de payload (reply ≤ 400 runes, ≤ 4 opciones, ≤ 8 `memoryNotes`), filtro `OutputAllowed`, pregunta del jugador como input no confiable (≤ 200 runes en la plantilla) y fallback neutro ("… te mira en silencio").
+- **Estado histórico al cerrar Batch 25:** en ese corte estaban pendientes personalidad, resumen LLM, mecanismos B/C y configuración Creator; esos puntos se implementaron en Batches 26–29. Sigue siendo válida la advertencia de caché de 30 min de `npc.dialogue`. QA del batch: tests dedicados, sin sección propia en `docs/qa/REGRESSION_REPORT.md`.
+- **Docs (rol Docs):** FASE 6.3 corte 1 pasa a **implementado (corte runtime)** en `PROJECT.md`, `ARCHITECTURE.md` (subsistema NPC LLM), esta sección (bloque Fase 6 + estado de batches), `README.md`, `docs/index.md`, `docs/user/commands.md` (`ask` documentado y fuera de la lista de inexistentes) y nota "Implementado (Batch 25, corte 1)" en `docs/design/PHASE6_LLM.md` §6.3.
+
+**Batch 26 — Backend (FASE 6.3, corte 2 — personalidad LLM del NPC, resumen LLM y config) + Frontend + QA + Docs (26-oct-2026):**
+
+- **Qué es:** FASE 6.3 pasa a **cortes 1+2 cableados**. El diálogo `ask` ganó personalidad estructurada y memoria de largo plazo real: `LLMConfig` (`pkg/entities/npcs/llm.go`) ahora lleva `Personality *LLMPersonality` (Big5 en [0,1]), `Goals`, `Secrets` y `Relations []LLMRelation` (Kind ∈ ally/rival/family/faction/mentor, Sentiment −1..1), con `Clone()`, `EffectivePersonality()`, `HasPersonality()` y `EffectiveMemoryTurns()` (ventana de facts); el proveedor (`pkg/server/llm.go`) resuelve la config viva (`npcLLMConfig`: instancia → plantilla) e inyecta las variables `personality`, `goals`, `secrets` y `relations` al prompt `npc.dialogue.yaml` (v1.0.1), cuyo system prompt ordena **no revelar secretos literalmente**. Un guard anti-fuga (`validateNPCDialoguePayloadWithSecrets` + `leaksSecret`) rechaza replies,
+`options[].label` y `memoryNotes` que reproducen un secreto palabra por palabra (`secret_leak` → retry con feedback → fallback neutro); las paráfrasis no se rechazan.
+- **Resumen LLM de memoria:** `triggerNPCMemorySummaryIfNeeded` dispara tras cada turno, en goroutine (ctx 12 s), cuando `Turns % SummaryAtTurns() == 0`, con `TaskNPCMemorySummary` (plantilla `npc.memory_summary.yaml`, temp 0.2, `RequireLLM: false`, sin caché, limit key `npcmem:<npcID>:<characterID>`); éxito → recarga la fila y guarda `Summary = …` con `SummarySource = "llm"`; fallo/vacío → el resumen determinista sigue. `repository.NPCMemory.SummarySource` (`""`/`deterministic`/`llm`, en el blob JSON — sin migración) hace que `RecordTurn` **preserve** los resúmenes LLM/externos y solo reconstruya los deterministas.
+- **Config en tres vías:** (1) YAML importer (`importer.YAMLNPC.LLM`, camelCase, deep copy en `ToEntity`/`converters.go`); (2) NPCTemplate REST (campo `llm` en detail DTO y upsert de `handler/npc_templates.go`, `Clone()` en ambas direcciones; lecturas solo autenticadas); (3) NPC factory UI del play client (panel "Dialogue / LLM", `NpcFactory.svelte` + `normalizeLLM` en `npcFactory.js`). **Spawn hereda:** `SpawnFromTemplate` (`pkg/service/npcs.go`) copia `template.LLM.Clone()`, de modo que una instancia no muta la plantilla. Contenido de ejemplo: **Master Aldric** (`TUT_MENTOR`, `import/adventure/data/npcs/tut_mentor.yaml`, gitignored) con `llm.enabled`, Big5, 2 goals, 1 secret y relación `player/mentor` 0.7 — `ask Master Aldric …` en R1001 ejercita el camino completo con proveedor instalado.
+- **Archivos clave:** `pkg/entities/npcs/llm.go`, `pkg/server/llm.go` (`formatNPCPersonalityContext`, `npcLLMConfig`, `triggerNPCMemorySummaryIfNeeded`, `validateNPCDialoguePayloadWithSecrets`, `leaksSecret`, `formatNPCMemoryLimited`, `loadNPCMemoryFull`), `pkg/repository/npc_memory.go` (`SummarySource`), `pkg/service/npcmemories.go` (`RecordTurn` preserva), `pkg/service/npcs.go` (spawn), `pkg/importer/{models,converters}.go`, `pkg/server/handler/npc_templates.go`, `pkg/service/llmprompt/prompts/{npc.dialogue,npc.memory_summary}.yaml`, `import/adventure/data/npcs/tut_mentor.yaml`, `public/mud-client/src/game/ui/NpcFactory.svelte`, `public/mud-client/src/game/npcFactory.js`.
+- **Tests:** `importer/llm_yaml_test.go` (YAML camelCase → deep copy), `service/npcmemories_test.go` (3: determinista, preserva resumen LLM, preserva resumen externo), `TestSpawnFromTemplateInheritsLLM` (spawn hereda `llm`), `server/llm_npc_test.go` (+4 sobre el corte 1: secretos pasados al prompt, fuga literal rechazada, guard sobre `options`/`memoryNotes` — validator y payload —; total 8) y `server/handler/npc_templates_test.go` (`TestNPCTemplateGetRedactsSecretsForNonCreators`). `go build`/`go vet`/suite verde en el corte.
+- **Estado histórico al cerrar Batch 26:** aún quedaban B/C, `FallbackDialogID` sin uso y caché de 30 min; B/C se completan en Batch 29 y `FallbackDialogID` ahora sirve como origen secundario para mapear etiquetas, aunque sigue sin ser fallback de error. Las observaciones QA de secretos y cobertura del guard quedaron cerradas. Sin sección propia en el reporte QA (corre hasta §B24).
+- **Docs (rol Docs):** FASE 6.3 cortes 1+2 pasan a **implementado** en `PROJECT.md` (roadmap, tabla de fases, comandos, bloques NPC/FASE 6, verificación — bloque consolidado pasa a "Batches 17–26"), `ARCHITECTURE.md` (párrafo Fase 6, subsistema NPC LLM con config/personalidad/resumen/anti-fuga, filas `ask` y `NPCMemoriesService`, estado de batches), `FEATURES.md` (esta sección: Last Updated, snippet `NPC.LLM`, comando `ask` en diálogos, bloque Fase 6 y estado de batches), `README.md` (fork additions + roadmap), `docs/index.md` y `docs/user/commands.md` (`ask` con personalidad/secretos/resumen/config); nota "Implementado (Batch 26, corte 2)" en `docs/design/PHASE6_LLM.md` §6.3 (sin reescribir el diseño).
+
+**Batch 27 — Backend + Frontend (FASE 6.3, corte 3 — opciones LLM accionables, conversación `__llm__`, relaciones dinámicas y feedback de cliente) + QA + Docs (30-oct-2026):**
+
+- **Qué es:** FASE 6.3 pasa a **cortes 1–3 cableados**. Las `options[]` que antes se pintaban como texto plano pasan a ser **accionables**: `deliverNPCDialogue` normaliza las opciones (`normalizeNPCDialogueOptions`: ≤4, `kind ∈ {flavor,end}`, label ≤120 runes) y las enriquece con `mapNPCDialogueOptions`/`matchAuthoredDialogLabel` (label → nodo del diálogo autoral: instancia → plantilla → `llm.FallbackDialogID`); con Conversation Service, `sendNPCDialogueDialog` abre una conversación con el **`DialogID` centinela `"__llm__"`** (`def.NPCDialogueDialogID`), guarda las opciones en `context` (`LLM_OPTIONS`), engagea la sesión NPC y manda `messages.NewDialogMessage` numerado (`Index = i+1`, `Username = <NPC>`). El input numérico pasa por `dialog_select.go` → `handleLLMDialogSelection` (`commands/llm_dialog.go`): `end` cierra, `NodeID` continúa el árbol autoral vía el nuevo `talkToNPCAt` (la conversación vira de `__llm__` al `DialogID` autoral con `CurrentNodeID = startNode`), el resto es `flavor` con `Continuation = true` (salta el rechazo por cooldown, refresca la ventana, respeta el semáforo); selección inválida → *"Invalid option. Please choose 1-N"* sin cerrar. Las conversaciones con `DialogID` vacío se ignoran (una sesión NPC abierta no reactiva opciones cerradas). **Relaciones dinámicas:** `relationDelta` del payload (clamp ±0.05 con `npc.ClampRelationDelta`), `applyNPCRelationDelta` → `NPCMemoriesService.AdjustRelation` → `npc.ApplyRelationDelta` (acumulado [-1,1] en `NPCMemory.Relations`, sin migración; default +0.02, 0 si la opción es `end`) y `mergeDynamicRelations` al prompt como `player(dinámica,0.04)`; `npc.dialogue.yaml` sube a **v1.0.2**. **Cliente:** `relationFeedback.js` + `Client.js` + `MUDXPlusStore.dialogRelation` + `DialogOverlay.svelte` (fila ▲/▼/•, wired en `RoomWidget.svelte` y `MobileRoomView.svelte`), **solo si el mensaje trae info de relación**.
+- **Archivos clave:** `pkg/mudserver/game/npc_dialogue.go` (`normalizeNPCDialogueOptions`, `mapNPCDialogueOptions`, `matchAuthoredDialogLabel`, `sendNPCDialogueDialog`, `npcDialogueAllow` con `Continuation`), `pkg/mudserver/game/commands/llm_dialog.go` (nuevo: `handleLLMDialogSelection`, `closeLLMDialogConversation`, `parseLLMDialogOptions`), `pkg/mudserver/game/commands/dialog_select.go` (routing `__llm__` + guard de `DialogID` vacío), `pkg/mudserver/game/commands/talk.go` (`talkToNPCAt`), `pkg/mudserver/game/commands/ask.go` (`buildNPCDialogueRequest` con `continuation`), `pkg/entities/npcs/llm.go` (`ClampRelationDelta`, `ApplyRelationDelta`, `MaxRelationDelta = 0.05`), `pkg/service/npcmemories.go` (`AdjustRelation`), `pkg/repository/npc_memory.go` (`Relations`), `pkg/server/llm.go` (`mergeDynamicRelations`, `applyNPCRelationDelta`), `pkg/service/llmprompt/prompts/npc.dialogue.yaml` (v1.0.2), `def/gamectrl.go` (`NPCDialogueDialogID`) y en el cliente `public/mud-client/src/game/relationFeedback.js`, `ui/DialogOverlay.svelte`, `game/Client.js`, `game/MUDXPlusStore.js`, `widgets/RoomWidget.svelte`, `mobile/MobileRoomView.svelte`.
+- **Tests:** `commands/llm_dialog_test.go` (5), `npc_dialogue_test.go` (`TestMatchAuthoredDialogLabelFindsNodeAndOption`), `service/npcmemories_test.go` (`TestAdjustRelationClampsAndPersists`), `server/llm_npc_test.go` (`TestInstallNPCDialogueProviderAdjustsRelation`) y `public/mud-client/src/game/relationFeedback_test.mjs` (+ `dialogOverlay_test.mjs` ejecutados a mano).
+- **QA (APROBADO CON OBSERVACIONES, 2026-10-30):** build/vet/suite completos en verde con Docker `golang:1.26`, `-race` en `pkg/mudserver/... pkg/server/... pkg/service/... pkg/entities/npcs/...` sin `DATA RACE`, `npm run build` OK; contrato verificado (opciones → nodo autoral/`flavor`/`end`, selección inválida mantiene opciones, delta acotado + persistido + en el prompt, secretos nunca expuestos, conversación stale no intercepta, `Username` en `DialogMessage`, sin regresión de `ask`/`talk`). **Observación no bloqueante ajena al batch:** `TestWardGritAndRetaliate` (`pkg/mudserver/game/combat/ward_test.go:111`, "tiny hit 2") falló de forma intermitente en la primera corrida con `-race` y pasó 10/10 en aislamiento (flakiness preexistente por crítico aleatorio; los tests de guardia `TestWardGuard*` del mismo fichero pasan). Warnings frontend no bloqueantes (selectores CSS sin uso, `autofocus` A11y). Sin sección propia en `docs/qa/REGRESSION_REPORT.md`.
+- **Pendientes al cierre del Batch 27 (histórico):** mecanismos B/C y `kind=quest:<id>` estaban pendientes entonces y se implementaron en Batch 29. Siguen pendientes la caché de 30 min que puede repetir respuestas y `FallbackDialogID` como fallback de error; este último solo sirve como fuente secundaria de diálogo autoral.
+- **Docs (rol Docs):** FASE 6.3 corte 3 pasa a **implementado** en `PROJECT.md` (roadmap, tabla de fases, fila `ask`, bloque consolidado → "Batches 17–27"), `ARCHITECTURE.md` (párrafo Fase 6, subsistema NPC LLM: entrega/selección/relaciones/feedback, filas `ask` y estado de batches), `FEATURES.md` (esta sección: Last Updated, snippet `NPC.LLM`, comando `ask`, bloque Fase 6, deuda y estado de batches), `docs/design/PHASE6_LLM.md` (nota "Implementado (Batches 25–27, cortes 1–3)") y `docs/user/commands.md` (`ask` con opciones accionables, relaciones, feedback y ejemplo con **Master Aldric**); nota del Batch 27 en `PROJECT.md`. **QA guard:** el observador señaló `TestWardGritAndRetaliate` de `ward_test.go` (guard tests `TestWardGuard*` en el mismo fichero).
 
 ---
 
