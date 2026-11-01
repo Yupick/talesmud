@@ -68,6 +68,9 @@ func performHandlerRequest(method, path string, body interface{}, user *entities
 		ctx.Set("userid", user.RefID)
 	}
 	handler(ctx)
+	// Flush the buffered status so bare c.Status(...) responses (e.g. 204)
+	// are visible on the recorder, as they are behind the real gin engine.
+	ctx.Writer.WriteHeaderNow()
 	return rec
 }
 
@@ -534,8 +537,8 @@ func TestGenerateCharacterRateLimit(t *testing.T) {
 
 	for i := 0; i < 2; i++ {
 		rec := performHandlerRequest(http.MethodPost, "/api/generate/character", body, player, nil, h.GenerateCharacter)
-		if rec.Code != http.StatusServiceUnavailable {
-			t.Fatalf("call %d: expected 503 (no groq), got %d body=%s", i+1, rec.Code, rec.Body.String())
+		if rec.Code != http.StatusOK {
+			t.Fatalf("call %d: expected 200 (deterministic fallback), got %d body=%s", i+1, rec.Code, rec.Body.String())
 		}
 	}
 	rec := performHandlerRequest(http.MethodPost, "/api/generate/character", body, player, nil, h.GenerateCharacter)

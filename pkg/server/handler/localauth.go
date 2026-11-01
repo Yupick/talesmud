@@ -143,20 +143,35 @@ func writeAuthErr(c *gin.Context, err error) {
 }
 
 type ipLimiter struct {
-	mu     sync.Mutex
-	limit  int
-	window time.Duration
-	hits   map[string][]time.Time
+	mu         sync.Mutex
+	limit      int
+	window     time.Duration
+	hits       map[string][]time.Time
+	lastPurge  time.Time
+	maxEntries int
 }
 
+// maxLimiterEntries bounds the number of tracked source IPs. Beyond it, only
+// expired entries are evicted; a brand-new IP is denied rather than letting the
+// map grow without bound.
+const maxLimiterEntries = 100000
+
 func newIPLimiter(limit int, window time.Duration) *ipLimiter {
-	return &ipLimiter{limit: limit, window: window, hits: map[string][]time.Time{}}
+	return &ipLimiter{
+		limit:      limit,
+		window:     window,
+		hits:       map[string][]time.Time{},
+		lastPurge:  time.Now(),
+		maxEntries: maxLimiterEntries,
+	}
 }
 
 func (l *ipLimiter) allow(ip string) bool {
 	now := time.Now()
 	l.mu.Lock()
 	defer l.mu.Unlock()
+	l.purgeLocked(now)
+
 	cut := now.Add(-l.window)
 	kept := l.hits[ip][:0]
 	for _, ts := range l.hits[ip] {
@@ -168,6 +183,42 @@ func (l *ipLimiter) allow(ip string) bool {
 		l.hits[ip] = kept
 		return false
 	}
+	if _, seen := l.hits[ip]; !seen && len(l.hits) >= l.maxEntries {
+		// Memory cap reached. Force a full purge and, if that frees nothing,
+		// reject new IPs instead of allowing unbounded growth.
+		l.purgeAllLocked(now)
+		if len(l.hits) >= l.maxEntries {
+			return false
+		}
+	}
 	l.hits[ip] = append(kept, now)
 	return true
+}
+
+// purgeLocked drops IPs whose activity window has fully expired. It runs at
+// most once per window to keep the amortized cost low.
+func (l *ipLimiter) purgeLocked(now time.Time) {
+	if now.Sub(l.lastPurge) < l.window {
+		return
+	}
+	l.lastPurge = now
+	l.purgeAllLocked(now)
+}
+
+// purgeAllLocked removes the hit history of every IP whose window has expired.
+func (l *ipLimiter) purgeAllLocked(now time.Time) {
+	cut := now.Add(-l.window)
+	for ip, times := range l.hits {
+		kept := times[:0]
+		for _, ts := range times {
+			if ts.After(cut) {
+				kept = append(kept, ts)
+			}
+		}
+		if len(kept) == 0 {
+			delete(l.hits, ip)
+		} else {
+			l.hits[ip] = kept
+		}
+	}
 }

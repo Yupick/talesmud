@@ -4,6 +4,8 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"strings"
@@ -27,7 +29,13 @@ var jwksCache struct {
 	fetchedAt time.Time
 }
 
+// jwksFetchMu serializes refreshes without holding jwksCache while doing I/O.
+var jwksFetchMu sync.Mutex
+
 const jwksCacheTTL = 1 * time.Hour
+
+// maxJWKSBytes bounds the JWKS response body (1 MiB is far above any real key set).
+const maxJWKSBytes = 1 << 20
 
 type jwks struct {
 	Keys []webKeys `json:"keys"`
@@ -43,48 +51,97 @@ type webKeys struct {
 }
 
 // fetchJWKS retrieves JWKS keys from Auth0, using an in-memory cache with TTL.
+//
+// Network I/O is done outside jwksCache's lock so a slow or hanging JWKS
+// endpoint cannot block concurrent token validation. jwksFetchMu still
+// serializes refreshes to avoid a thundering herd; the cache is re-checked
+// after acquiring it (double-check).
 func fetchJWKS() ([]webKeys, error) {
-	jwksCache.RLock()
-	if len(jwksCache.keys) > 0 && time.Since(jwksCache.fetchedAt) < jwksCacheTTL {
-		keys := jwksCache.keys
-		jwksCache.RUnlock()
+	if keys, ok := cachedJWKS(); ok {
 		return keys, nil
 	}
-	jwksCache.RUnlock()
 
-	jwksCache.Lock()
-	defer jwksCache.Unlock()
+	jwksFetchMu.Lock()
+	defer jwksFetchMu.Unlock()
 
-	// Double-check after acquiring write lock
-	if len(jwksCache.keys) > 0 && time.Since(jwksCache.fetchedAt) < jwksCacheTTL {
-		return jwksCache.keys, nil
+	// Double-check after acquiring the fetch lock.
+	if keys, ok := cachedJWKS(); ok {
+		return keys, nil
 	}
 
 	log.Info("Fetching JWKS keys from Auth0")
-	resp, err := http.Get(os.Getenv("AUTH0_WK_JWKS"))
+	keys, err := fetchJWKSFromURL(jwksHTTPClient(), os.Getenv("AUTH0_WK_JWKS"))
 	if err != nil {
-		// Return stale cache if available
-		if len(jwksCache.keys) > 0 {
+		// Return stale cache if available.
+		if stale, ok := staleJWKS(); ok {
 			log.WithError(err).Warn("Failed to refresh JWKS, using stale cache")
-			return jwksCache.keys, nil
+			return stale, nil
 		}
+		return nil, err
+	}
+
+	jwksCache.Lock()
+	jwksCache.keys = keys
+	jwksCache.fetchedAt = time.Now()
+	jwksCache.Unlock()
+	log.WithField("keyCount", len(keys)).Info("JWKS keys cached")
+	return keys, nil
+}
+
+// jwksHTTPClient returns the client used to fetch JWKS. The timeout is
+// overridable through JWKS_TIMEOUT_SECONDS (default 10s).
+func jwksHTTPClient() *http.Client {
+	return &http.Client{Timeout: envDuration("JWKS_TIMEOUT_SECONDS", 10*time.Second)}
+}
+
+// fetchJWKSFromURL performs a single bounded JWKS fetch. Split out for testing.
+func fetchJWKSFromURL(client *http.Client, rawURL string) ([]webKeys, error) {
+	rawURL = strings.TrimSpace(rawURL)
+	if rawURL == "" {
+		return nil, errors.New("AUTH0_WK_JWKS is not configured")
+	}
+	resp, err := client.Get(rawURL)
+	if err != nil {
 		return nil, err
 	}
 	defer resp.Body.Close()
-
-	var parsed jwks
-	if err := json.NewDecoder(resp.Body).Decode(&parsed); err != nil {
-		if len(jwksCache.keys) > 0 {
-			log.WithError(err).Warn("Failed to decode JWKS, using stale cache")
-			return jwksCache.keys, nil
-		}
-		return nil, err
+	if resp.StatusCode < http.StatusOK || resp.StatusCode >= http.StatusMultipleChoices {
+		return nil, fmt.Errorf("JWKS endpoint returned status %d", resp.StatusCode)
 	}
 
-	jwksCache.keys = parsed.Keys
-	jwksCache.fetchedAt = time.Now()
-	log.WithField("keyCount", len(parsed.Keys)).Info("JWKS keys cached")
+	body, err := io.ReadAll(io.LimitReader(resp.Body, maxJWKSBytes+1))
+	if err != nil {
+		return nil, err
+	}
+	if len(body) > maxJWKSBytes {
+		return nil, fmt.Errorf("JWKS response exceeds %d bytes", maxJWKSBytes)
+	}
+
+	var parsed jwks
+	if err := json.Unmarshal(body, &parsed); err != nil {
+		return nil, err
+	}
 	return parsed.Keys, nil
+}
+
+// cachedJWKS returns fresh cached keys, if any.
+func cachedJWKS() ([]webKeys, bool) {
+	jwksCache.RLock()
+	defer jwksCache.RUnlock()
+	if len(jwksCache.keys) > 0 && time.Since(jwksCache.fetchedAt) < jwksCacheTTL {
+		return jwksCache.keys, true
+	}
+	return nil, false
+}
+
+// staleJWKS returns any cached keys regardless of TTL, if present.
+func staleJWKS() ([]webKeys, bool) {
+	jwksCache.RLock()
+	defer jwksCache.RUnlock()
+	if len(jwksCache.keys) > 0 {
+		return jwksCache.keys, true
+	}
+	return nil, false
 }
 
 // getPemCert retrieves the PEM certificate matching the JWT token's key ID from cached JWKS keys.

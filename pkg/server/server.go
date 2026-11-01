@@ -1,10 +1,15 @@
 package server
 
 import (
+	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
+	"os/signal"
+	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -25,7 +30,6 @@ import (
 	"github.com/talesmud/talesmud/pkg/scripts/runner"
 	"github.com/talesmud/talesmud/pkg/server/handler"
 	"github.com/talesmud/talesmud/pkg/service"
-	"github.com/talesmud/talesmud/pkg/service/groq"
 	"github.com/talesmud/talesmud/pkg/sshgate"
 	"github.com/talesmud/talesmud/pkg/sshkeys"
 	"github.com/talesmud/talesmud/pkg/util"
@@ -113,6 +117,59 @@ func allowedCORSOrigins() []string {
 	return origins
 }
 
+// httpTimeouts groups the HTTP server timeouts. Defaults are chosen to keep
+// slowloris and idle-connection resource exhaustion bounded without cutting
+// off legitimate slow clients. WebSocket connections are hijacked by
+// gorilla/websocket, which clears the deadlines, so WriteTimeout does not
+// terminate an established MUD session.
+type httpTimeouts struct {
+	ReadHeader time.Duration
+	Read       time.Duration
+	Write      time.Duration
+	Idle       time.Duration
+}
+
+// envDuration reads a duration from the environment. It accepts Go duration
+// syntax ("5s", "1m30s") as well as a bare number of seconds ("5"). Empty or
+// invalid values fall back to def.
+func envDuration(key string, def time.Duration) time.Duration {
+	raw := strings.TrimSpace(os.Getenv(key))
+	if raw == "" {
+		return def
+	}
+	if d, err := time.ParseDuration(raw); err == nil && d > 0 {
+		return d
+	}
+	if secs, err := strconv.Atoi(raw); err == nil && secs > 0 {
+		return time.Duration(secs) * time.Second
+	}
+	return def
+}
+
+// httpTimeoutConfig resolves the HTTP server timeouts, overridable via env.
+func httpTimeoutConfig() httpTimeouts {
+	return httpTimeouts{
+		ReadHeader: envDuration("HTTP_READ_HEADER_TIMEOUT", 5*time.Second),
+		Read:       envDuration("HTTP_READ_TIMEOUT", 15*time.Second),
+		Write:      envDuration("HTTP_WRITE_TIMEOUT", 30*time.Second),
+		Idle:       envDuration("HTTP_IDLE_TIMEOUT", 60*time.Second),
+	}
+}
+
+// newHTTPServer builds the HTTP server with explicit timeouts. Exposed as a
+// helper so tests can assert the configured values.
+func newHTTPServer(addr string, handler http.Handler) *http.Server {
+	t := httpTimeoutConfig()
+	return &http.Server{
+		Addr:              addr,
+		Handler:           handler,
+		ReadHeaderTimeout: t.ReadHeader,
+		ReadTimeout:       t.Read,
+		WriteTimeout:      t.Write,
+		IdleTimeout:       t.Idle,
+	}
+}
+
 // NewApp returns an application instance
 // this is the primary stateless server providing an API interface
 func NewApp() App {
@@ -143,6 +200,7 @@ func NewApp() App {
 		)
 	}))
 	r.Use(gin.Recovery())
+	r.Use(SecurityHeadersMiddleware())
 
 	scriptRunner := runner.NewMultiRunner()
 	facade := service.NewFacade(repos, scriptRunner)
@@ -226,6 +284,24 @@ func (app *app) setupRoutes() {
 		NPCs:       app.Facade.NPCsService(),
 	}
 
+	clans := &handler.ClansHandler{
+		Service:    app.Facade.ClansService(),
+		Characters: app.Facade.CharactersService(),
+	}
+
+	dms := &handler.DMsHandler{
+		Service:    app.Facade.DMService(),
+		Characters: app.Facade.CharactersService(),
+	}
+
+	dungeons := &handler.DungeonsHandler{
+		Service: app.Facade.DungeonsService(),
+	}
+
+	npcTemplates := &handler.NPCTemplatesHandler{
+		Service: app.Facade.NPCTemplatesService(),
+	}
+
 	usr := &handler.UsersHandler{
 		Service: app.Facade.UsersService(),
 	}
@@ -281,8 +357,20 @@ func (app *app) setupRoutes() {
 		Service: app.Facade.SkillsService(),
 	}
 
+	llmRT := buildLLMRuntime(app.Facade)
+
 	generate := &handler.GenerateHandler{
-		GroqClient: groq.NewClient(),
+		LLMClient: llmRT.pipeline.Client(),
+		Pipeline:  llmRT.pipeline,
+		Registry:  llmRT.registry,
+	}
+
+	llmHandler := &handler.LLMHandler{
+		Pipeline:      llmRT.pipeline,
+		Registry:      llmRT.registry,
+		QuestGen:      llmRT.questgen,
+		RoomsService:  app.Facade.RoomsService(),
+		QuestsService: app.Facade.QuestsService(),
 	}
 
 	backgroundsPath := strings.TrimSpace(os.Getenv("BACKGROUNDS_PATH"))
@@ -389,12 +477,44 @@ func (app *app) setupRoutes() {
 		protected.GET("user", usr.GetUser)
 		protected.PUT("user", usr.UpdateUser)
 
+		// Social: clans and direct messages (any authenticated user).
+		protected.GET("clans/mine", clans.GetMine)
+		protected.POST("clans", clans.Create)
+		protected.POST("clans/:id/invite", clans.Invite)
+		protected.POST("clans/invites/:inviteId/accept", clans.AcceptInvite)
+		protected.POST("clans/invites/:inviteId/decline", clans.DeclineInvite)
+		protected.POST("clans/:id/kick", clans.Kick)
+		protected.POST("clans/:id/rank", clans.ChangeRank)
+		protected.POST("clans/:id/deposit", clans.Deposit)
+		protected.POST("clans/:id/withdraw", clans.Withdraw)
+		protected.POST("clans/:id/disband", clans.Disband)
+
+		protected.GET("dm/channels", dms.GetChannels)
+		protected.POST("dm/channels", dms.CreateChannel)
+		protected.GET("dm/channels/:channelId/messages", dms.GetMessages)
+		protected.POST("dm/channels/:channelId/messages", dms.SendMessage)
+		protected.POST("dm/channels/:channelId/read", dms.MarkRead)
+
+		// Dungeon builder definitions (FASE 5.1): reads for any authenticated
+		// user; writes are creator-gated below.
+		protected.GET("dungeons", dungeons.List)
+		protected.GET("dungeons/:id", dungeons.Get)
+
+		// NPC/mob templates (FASE 5.3): reads for any authenticated user;
+		// writes are creator-gated below. Distinct from the runtime NPC store
+		// on /api/npcs and the legacy /api/npcs/templates alias.
+		protected.GET("npc-templates", npcTemplates.List)
+		protected.GET("npc-templates/:id", npcTemplates.Get)
+
 		// Creator-level routes (creator or admin role required)
 		var liveGame *game.Game
 		if ctrl := app.mud.GameCtrl(); ctrl != nil {
 			liveGame, _ = ctrl.(*game.Game)
 		}
 		healthHandler.Game = liveGame
+		llmRT.installDMNarrator(liveGame, app.Facade)
+		llmRT.installContextualQuestProvider(liveGame, app.Facade)
+		llmRT.installNPCDialogueProvider(liveGame, app.Facade)
 		creator := protected.Group("")
 		creator.Use(CreatorMiddleware())
 		creator.Use(handler.AuditWrites(app.Facade.AuditService()))
@@ -503,12 +623,31 @@ func (app *app) setupRoutes() {
 			creator.PUT("skills/:id", skillsHandler.UpdateSkillByID)
 			creator.DELETE("skills/:id", skillsHandler.DeleteSkillByID)
 
+			// Dungeon builder (FASE 5.1)
+			creator.POST("dungeons", dungeons.Create)
+			creator.PUT("dungeons/:id", dungeons.Update)
+			creator.DELETE("dungeons/:id", dungeons.Delete)
+
+			// NPC/mob templates (FASE 5.3)
+			creator.POST("npc-templates", npcTemplates.Create)
+			creator.PUT("npc-templates/:id", npcTemplates.Update)
+			creator.DELETE("npc-templates/:id", npcTemplates.Delete)
+
 			// Backgrounds
 			creator.POST("backgrounds/upload", backgrounds.UploadBackground)
 			creator.DELETE("backgrounds/:filename", backgrounds.DeleteBackground)
 
 			// Server Settings
 			creator.PUT("settings", serverSettings.UpdateServerSettings)
+
+			// LLM-assisted authoring (creator-only). Quest generation is a
+			// dry run unless the request sets commit=true.
+			creator.POST("creator/llm/quests/generate", llmHandler.GenerateQuests)
+			creator.POST("creator/llm/quests/contextual", llmHandler.GenerateContextualQuest)
+			creator.POST("creator/llm/rooms/:id/description", llmHandler.GenerateRoomDescription)
+			creator.GET("creator/llm/prompts", llmHandler.ListPrompts)
+			creator.POST("creator/llm/prompts", llmHandler.SavePrompt)
+			creator.POST("creator/llm/prompts/:id/test", llmHandler.TestPrompt)
 
 			// Live world and the change log. Character inventories stay on the admin routes below.
 			creator.GET("audit", handler.ListAudit(app.Facade.AuditService()))
@@ -545,6 +684,10 @@ func (app *app) setupRoutes() {
 			// Guest session analytics
 			adminAPI.GET("stats/guests", guestStats.GetSummary)
 			adminAPI.GET("stats/guests/daily", guestStats.GetDailyStats)
+
+			// LLM provider status and counters (admin-only).
+			adminAPI.GET("llm/status", llmHandler.Status)
+			adminAPI.GET("llm/stats", llmHandler.Stats)
 		}
 	}
 
@@ -735,14 +878,37 @@ func (app *app) Run() {
 	// read port from env file
 	port := os.Getenv("PORT")
 
-	server := fmt.Sprintf("0.0.0.0:%v", port)
-
 	// setup CORS handler
 	corsHandler := handlers.CORS(
 		handlers.AllowedHeaders([]string{"X-Requested-With", "Content-Type", "Authorization"}),
 		handlers.AllowedMethods([]string{"GET", "POST", "PUT", "HEAD", "DELETE", "OPTIONS"}),
 		handlers.AllowedOrigins(allowedCORSOrigins()))(app.Router)
 
+	server := newHTTPServer(fmt.Sprintf("0.0.0.0:%v", port), corsHandler)
+
+	// Serve until ListenAndServe fails or a shutdown signal arrives.
+	serveErr := make(chan error, 1)
+	go func() {
+		serveErr <- server.ListenAndServe()
+	}()
+
 	log.WithField("PORT", port).Info(fmt.Sprintf("TalesMUD Server is running, listening on port %v", port))
-	log.Fatal(http.ListenAndServe(server, corsHandler))
+
+	shutdown := make(chan os.Signal, 1)
+	signal.Notify(shutdown, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(shutdown)
+
+	select {
+	case err := <-serveErr:
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
+			log.WithError(err).Fatal("TalesMUD Server stopped unexpectedly")
+		}
+	case sig := <-shutdown:
+		log.WithField("signal", sig.String()).Info("Shutting down TalesMUD Server")
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := server.Shutdown(ctx); err != nil {
+			log.WithError(err).Error("Graceful shutdown failed")
+		}
+	}
 }
