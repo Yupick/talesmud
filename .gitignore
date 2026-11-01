@@ -15,6 +15,8 @@
 
 # Go binary
 bin/tales
+bin/dialog_sandbox
+/dialog_sandbox
 cmd/owndnd/owndnd
 main
 
@@ -68,6 +70,8 @@ img/*.png
 *.Identifier
 import/*
 !import/README.md
+!import/adventure/
+!import/adventure/**
 
 # Uploaded content (keep directory structure but not user uploads)
 uploads/backgrounds/*
@@ -75,9 +79,13 @@ uploads/backgrounds/*
 backups/*
 
 public/landing/*.png
-tales
+/tales
 
 # Flutter APK playtest builds (rsync to VPS; do not commit)
 public/landing/app/downloads/*.apk
 public/landing/app/downloads/*.apk.sha256
 public/mud-client/public/activate.js.map
+
+# Runtime logs and local server binary (not part of the repo)
+logs/
+/talesmud-server

@@ -21,6 +21,10 @@ import (
 	"github.com/talesmud/talesmud/pkg/util"
 )
 
+// defaultGameModePath is applied when no -config flag is passed and the file
+// exists. It selects the fork defaults (local auth, classic presentation).
+const defaultGameModePath = "config/gamemode.yaml"
+
 func main() {
 	// Parse command-line flags
 	importFolder := flag.String("import", "", "Import world data from folder (e.g., sample-world)")
@@ -40,8 +44,17 @@ func main() {
 	if err != nil {
 		log.Warn("Error loading .env file")
 	}
-	if *configPath != "" {
-		if err := gamemode.ApplyFile(*configPath); err != nil {
+	// The fork boots in local-auth mode by default. When no -config is given,
+	// use config/gamemode.yaml if it exists. ApplyEnv still runs afterwards so
+	// AUTH_MODE / PRESENTATION environment variables override the file.
+	effectiveConfig := *configPath
+	if effectiveConfig == "" {
+		if _, statErr := os.Stat(defaultGameModePath); statErr == nil {
+			effectiveConfig = defaultGameModePath
+		}
+	}
+	if effectiveConfig != "" {
+		if err := gamemode.ApplyFile(effectiveConfig); err != nil {
 			log.Fatal(err)
 		}
 	}
@@ -49,6 +62,9 @@ func main() {
 
 	// Configure logging (stderr + rotating file, 7-day retention)
 	util.ConfigureLogging()
+
+	// Optional diagnostics endpoint (ENABLE_PPROF=true, PPROF_ADDR, see pprof.go)
+	startPprof()
 
 	// Get SQLite path
 	sqlitePath := os.Getenv("SQLITE_PATH")

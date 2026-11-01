@@ -33,19 +33,19 @@ prepare-embedded-assets:
 
 build-backend: prepare-embedded-assets
 	echo "Building backend"
-	go build -o bin/tales cmd/tales/main.go
+	go build -buildvcs=false -o bin/tales ./cmd/tales
 
 build-dialogs-sandbox:
 	echo "Building Dialogs sandbox"
-	go build -o bin/dialog_sandbox cmd/dialog_sandbox/main.go
+	go build -buildvcs=false -o bin/dialog_sandbox ./cmd/dialog_sandbox
 
 run-dialogs-sandbox:
 	echo "Starting dialogs sandbox..."
-	go run cmd/dialog_sandbox/main.go
+	go run ./cmd/dialog_sandbox
 
 run-server: prepare-embedded-assets
 	echo "Starting tales server ..."
-	go run cmd/tales/main.go
+	go run ./cmd/tales
 
 run-frontend:
 	echo "Starting main frontend ..."
@@ -79,4 +79,4 @@ build:
 	cp -r public/mud-client/public/* pkg/webuiplay/dist/
 
 	echo "3. Building backend"
-	go build -o bin/tales cmd/tales/main.go
+	go build -buildvcs=false -o bin/tales ./cmd/tales

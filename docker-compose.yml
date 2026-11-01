@@ -12,22 +12,56 @@ services:
     environment:
       - GIN_MODE=release
       - SQLITE_PATH=/app/data/talesmud.db
-      - AUTH0_AUDIENCE=${AUTH0_AUDIENCE:?set AUTH0_AUDIENCE}
-      - AUTH0_DOMAIN=${AUTH0_DOMAIN:?set AUTH0_DOMAIN}
-      - AUTH0_WK_JWKS=${AUTH0_WK_JWKS:?set AUTH0_WK_JWKS}
+      # local (fork default) | auth0. Auth0_* is only read in auth0 mode.
+      - AUTH_MODE=${AUTH_MODE:-local}
+      # Optional Auth0 values; only required when AUTH_MODE=auth0.
+      - AUTH0_AUDIENCE=${AUTH0_AUDIENCE:-}
+      - AUTH0_DOMAIN=${AUTH0_DOMAIN:-}
+      - AUTH0_WK_JWKS=${AUTH0_WK_JWKS:-}
       - ADMIN_USER=${ADMIN_USER:-}
       - ADMIN_PASSWORD=${ADMIN_PASSWORD:-}
       - GUEST_SECRET=${GUEST_SECRET:-}
+      - SESSION_SECRET=${SESSION_SECRET:-}
       - TRUSTED_PROXIES=${TRUSTED_PROXIES:-127.0.0.1}
       - CORS_ALLOWED_ORIGINS=${CORS_ALLOWED_ORIGINS:-}
       - MUD_ADMIN_OAUTHID=${MUD_ADMIN_OAUTHID:-}
+      # LLM: ollama (default, local sidecar) | groq | none/off.
+      # docker-compose --profile ollama up -d starts the optional sidecar below.
+      - LLM_PROVIDER=${LLM_PROVIDER:-ollama}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - OLLAMA_MODEL=${OLLAMA_MODEL:-llama3.1}
+      - LLM_TIMEOUT_SECONDS=${LLM_TIMEOUT_SECONDS:-60}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      # Dungeon Master prose (Phase 6.5). Silence when no LLM is available.
+      - LLM_DM_ENABLED=${LLM_DM_ENABLED:-1}
+      - LLM_DM_COOLDOWN_SECONDS=${LLM_DM_COOLDOWN_SECONDS:-45}
+      - LLM_DM_TIMEOUT_SECONDS=${LLM_DM_TIMEOUT_SECONDS:-8}
+      - LLM_DM_MAX_PER_MIN=${LLM_DM_MAX_PER_MIN:-10}
     volumes:
       - talesmud-data:/app/data
       - talesmud-uploads:/app/uploads
       - talesmud-backups:/app/backups
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:8010/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  # Optional local LLM sidecar. Not started by default and talesmud does not
+  # depend on it. Enable with: docker-compose --profile ollama up -d
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    ports:
+      - "11434:11434"
+    volumes:
+      - ollama-models:/root/.ollama
     restart: unless-stopped
 
 volumes:
   talesmud-data:
   talesmud-uploads:
   talesmud-backups:
+  ollama-models:

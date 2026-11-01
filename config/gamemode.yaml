@@ -1,0 +1,12 @@
+# Fork game-mode profile. Loaded by default when no -config flag is passed,
+# so the server boots with local username/password auth instead of Auth0.
+# Keys here mirror the YAML tags of pkg/gamemode.Config.
+# Do NOT add ruleset sections (progression/death/new_day/resources/combat/regen)
+# to this file; those belong to config/ruleset.yaml.
+presentation: classic
+auth: local
+port: "8010"
+sqlite_path: data/talesmud.db
+timezone: UTC
+title: "Mi MUD"
+subtitle: "Dungeon crawler"

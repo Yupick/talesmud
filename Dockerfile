@@ -68,6 +68,10 @@ WORKDIR /app
 
 COPY --from=build-backend /tales /app/tales
 
+# Default game-mode (local auth + classic presentation). The binary loads
+# /app/config/gamemode.yaml automatically when no -config flag is passed.
+COPY --from=build-backend /src/config/gamemode.yaml /app/config/gamemode.yaml
+
 # Ensure writable dirs for SQLite and uploads
 RUN mkdir -p /app/data /app/uploads /app/backups && \
     chown -R tales:tales /app
