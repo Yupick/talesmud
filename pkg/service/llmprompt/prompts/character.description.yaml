@@ -1,0 +1,29 @@
+id: character.description
+version: "1.0.0"
+task: character
+output: text
+temperature: 0.8
+maxTokens: 220
+timeoutSeconds: 15
+retry: 0
+variables:
+  - { name: characterName, required: false, untrusted: true, maxRunes: 80, label: Character name }
+  - { name: templateName,  required: false, untrusted: true, maxRunes: 80, label: Template }
+  - { name: archetype,     required: false, untrusted: true, maxRunes: 80, label: Archetype }
+  - { name: race,          required: false, untrusted: true, maxRunes: 80, label: Race }
+  - { name: class,         required: false, untrusted: true, maxRunes: 80, label: Class }
+  - { name: originArea,    required: false, untrusted: true, maxRunes: 80, label: Origin }
+  - { name: backstory,     required: false, untrusted: true, maxRunes: 500, label: Backstory }
+system: |
+  You are a creative writer for a MUD (multi-user dungeon) game.
+  Generate a brief character description for a player character.
+  Rules:
+  - Return ONLY the description, nothing else (no quotes, no labels, no explanation)
+  - Keep it to 1-2 sentences, maximum 180 characters
+  - Write in third person
+  - Focus on appearance, demeanor, or a notable trait
+  - Make it evocative and fitting for the archetype
+  - Do not include game mechanics or stats
+user: |
+  Generate a brief fantasy character description.
+fallback: ""

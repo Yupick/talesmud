@@ -23,6 +23,8 @@ const (
 	KitBolt     = "bolt"
 	KitRig      = "rig"
 	KitOverload = "overload"
+	KitMend     = "mend"
+	KitRenew    = "renew"
 )
 
 const HotbarCap = 4
@@ -38,9 +40,7 @@ func ClassKit() []*Skill {
 	specs := classkit.Skills()
 	out := make([]*Skill, 0, len(specs))
 	for _, spec := range specs {
-		s := kit(spec.ID, spec.Name, spec.ClassID, spec.Level, spec.Effect, spec.KeepsSwing, spec.OncePerFight, spec.Cooldown, spec.Multiplier, spec.Tooltip)
-		s.Target = skillTarget(spec.Target)
-		out = append(out, s)
+		out = append(out, kit(spec))
 	}
 	return out
 }
@@ -58,22 +58,46 @@ func skillTarget(target string) TargetType {
 	}
 }
 
-func kit(id, name, classID string, level int32, kind string, keeps, once bool, cd int, mult float64, desc string) *Skill {
+// kit builds one engine skill from a catalog spec. A spec with ManaCost > 0
+// spends mana; when it also carries a cooldown, the engine pays both (mana is
+// deducted AND the cooldown starts). ResourceType reports mana as the primary
+// cost when there is a mana_cost, otherwise the cooldown. The physical kit
+// keeps ManaCost 0 and remains cooldown-only.
+func kit(spec classkit.SkillSpec) *Skill {
+	resource := ResourceCooldown
+	if spec.ManaCost > 0 {
+		resource = ResourceMana
+	}
 	return &Skill{
-		Entity:         &entities.Entity{ID: id},
-		Name:           name,
-		Description:    desc,
-		ClassIDs:       []string{classID},
-		LevelRequired:  level,
-		ResourceType:   ResourceCooldown,
-		ManaCost:       0,
-		CooldownRounds: cd,
-		Target:         TargetEnemy,
-		Effect:         EffectDamage,
-		Kit:            kind,
-		KeepsSwing:     keeps,
-		OncePerFight:   once,
-		SwingMult:      mult,
+		Entity:         &entities.Entity{ID: spec.ID},
+		Name:           spec.Name,
+		Description:    spec.Tooltip,
+		ClassIDs:       []string{spec.ClassID},
+		LevelRequired:  spec.Level,
+		ResourceType:   resource,
+		ManaCost:       int32(spec.ManaCost),
+		CooldownRounds: spec.Cooldown,
+		Target:         skillTarget(spec.Target),
+		Effect:         kitEffect(spec.Effect),
+		Kit:            spec.Effect,
+		KeepsSwing:     spec.KeepsSwing,
+		OncePerFight:   spec.OncePerFight,
+		SwingMult:      spec.Multiplier,
+		Duration:       spec.Duration,
+		Component:      spec.Component,
+	}
+}
+
+// kitEffect maps a kit primitive onto the generic effect it resolves like.
+// Damage is the default; mend and renew resolve as heal and HoT.
+func kitEffect(kind string) EffectType {
+	switch strings.ToLower(strings.TrimSpace(kind)) {
+	case KitMend:
+		return EffectHeal
+	case KitRenew:
+		return EffectHot
+	default:
+		return EffectDamage
 	}
 }
 

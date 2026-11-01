@@ -5,4 +5,5 @@ type CreatePartyDTO struct {
 	Name              string   `json:"name,omitempty"`
 	Characters        []string `json:"characters,omitempty"`
 	LeaderCharacterID string   `json:"leaderCharacterId,omitempty"`
+	LootRule          string   `json:"lootRule,omitempty"`
 }

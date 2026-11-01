@@ -11,6 +11,7 @@ var KnownEffects = map[string]bool{
 	"slip": true, "nick": true, "smoke": true,
 	"inscribe": true, "sear": true, "glyph": true,
 	"guard": true, "bolt": true, "rig": true, "overload": true,
+	"mend": true, "renew": true,
 }
 
 // Row is one class's damage row. 0 on a multiplier means "use 1".
@@ -34,17 +35,30 @@ type Grit struct {
 
 // SkillSpec is one hotbar skill. Effect is a KnownEffects id.
 type SkillSpec struct {
-	ID           string  `yaml:"id" json:"id"`
-	Name         string  `yaml:"name" json:"name"`
-	Effect       string  `yaml:"effect" json:"effect"`
-	Level        int32   `yaml:"level" json:"levelRequired"`
-	OncePerFight bool    `yaml:"once_per_fight" json:"oncePerFight"`
-	KeepsSwing   bool    `yaml:"keeps_swing" json:"keepsSwing"`
-	Cooldown     int     `yaml:"cooldown" json:"cooldownRounds"`
-	Multiplier   float64 `yaml:"multiplier" json:"swingMult"`
-	Tooltip      string  `yaml:"tooltip" json:"description"`
-	Target       string  `yaml:"target" json:"target"`
-	ClassID      string  `yaml:"-" json:"-"`
+	ID           string `yaml:"id" json:"id"`
+	Name         string `yaml:"name" json:"name"`
+	Effect       string `yaml:"effect" json:"effect"`
+	Level        int32  `yaml:"level" json:"levelRequired"`
+	OncePerFight bool   `yaml:"once_per_fight" json:"oncePerFight"`
+	KeepsSwing   bool   `yaml:"keeps_swing" json:"keepsSwing"`
+	Cooldown     int    `yaml:"cooldown" json:"cooldownRounds"`
+	// ManaCost is the mana spent per use. 0 (the default) means the skill costs
+	// no mana, which is how the physical kit stays. A skill may carry both a
+	// mana_cost and a cooldown: the engine spends the mana AND starts the
+	// cooldown when both are present.
+	ManaCost   int     `yaml:"mana_cost" json:"manaCost"`
+	Multiplier float64 `yaml:"multiplier" json:"swingMult"`
+	// Duration is the round count for HoT/DoT kits (renew, inscribe). 0 means
+	// the engine default.
+	Duration int    `yaml:"duration" json:"duration"`
+	Tooltip  string `yaml:"tooltip" json:"description"`
+	Target   string `yaml:"target" json:"target"`
+	// Component is the per-school reagent hook (for example arcane_dust,
+	// divine_wax, nature_herb, fire_salt, shadow_essence). The engine does not
+	// consume a physical component yet; it is carried so a later inventory
+	// pass can require the reagent without another schema change.
+	Component string `yaml:"component,omitempty" json:"component,omitempty"`
+	ClassID   string `yaml:"-" json:"-"`
 }
 
 // StartItem is a template starter piece named the way the importer names items.
@@ -78,6 +92,7 @@ type Def struct {
 	Description   string            `yaml:"description" json:"description"`
 	ArmorType     string            `yaml:"armor_type" json:"armorType"`
 	CombatType    string            `yaml:"combat_type" json:"combatType"`
+	School        string            `yaml:"school" json:"school,omitempty"`
 	Primary       string            `yaml:"primary" json:"-"`
 	SkillClass    string            `yaml:"skill_class" json:"skillClass"`
 	Aliases       []string          `yaml:"aliases" json:"aliases"`
@@ -98,6 +113,9 @@ type Def struct {
 	RaceBlurbs    map[string]string `yaml:"race_blurbs" json:"-"`
 	Template      *Template         `yaml:"template" json:"-"`
 	Skills        []SkillSpec       `yaml:"skills" json:"skills"`
+	// Talents optionally pins the class talent ids. Empty means the class
+	// offers every talent of its School (see TalentsForClass).
+	Talents []string `yaml:"talents" json:"-"`
 }
 
 func norm(id string) string {
@@ -133,6 +151,7 @@ func (d *Def) copy() *Def {
 	cp.Also = append([]string(nil), d.Also...)
 	cp.Races = append([]string(nil), d.Races...)
 	cp.Skills = append([]SkillSpec(nil), d.Skills...)
+	cp.Talents = append([]string(nil), d.Talents...)
 	if d.RaceBlurbs != nil {
 		cp.RaceBlurbs = map[string]string{}
 		for k, v := range d.RaceBlurbs {

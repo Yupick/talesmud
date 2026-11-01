@@ -94,3 +94,20 @@ func (u *User) RedactedCopy() *User {
 	cp.PasswordHash = ""
 	return &cp
 }
+
+// Snapshot returns a detached copy of the user. The copy shares no mutable
+// state with the original (the embedded entity is copied too), so it can be
+// serialised while the original keeps changing. Presence writes used to
+// hand the live user to the repository, which marshalled it to JSON while
+// another goroutine was still mutating it (Batch 23).
+func (u *User) Snapshot() *User {
+	if u == nil {
+		return nil
+	}
+	cp := *u
+	if u.Entity != nil {
+		entity := *u.Entity
+		cp.Entity = &entity
+	}
+	return &cp
+}

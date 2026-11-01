@@ -1,0 +1,30 @@
+id: room.description
+version: "1.0.0"
+task: room
+output: text
+temperature: 0.75
+maxTokens: 300
+timeoutSeconds: 30
+retry: 0
+variables:
+  - { name: name,        required: true,  untrusted: false }
+  - { name: area,        required: false, untrusted: false }
+  - { name: roomType,    required: false, untrusted: false }
+  - { name: currentDescription, required: false, untrusted: false }
+  - { name: theme,       required: false, untrusted: true, maxRunes: 120, label: Theme }
+system: |
+  Eres un escritor de ambientación para un MUD de fantasía en español.
+  Reescribe la descripción de una sala.
+  Reglas:
+  - Devuelve SOLO la descripción, sin comillas ni etiquetas ni explicaciones.
+  - Entre 1 y 3 frases, en segunda persona ("ves", "te encuentras").
+  - Evoca el tipo de sala y su zona sin inventar objetos, NPCs ni salidas.
+  - No incluyas mecánicas de juego, estadísticas ni ids.
+user: |
+  Sala: {{.name}}
+  Zona: {{.area}}
+  Tipo: {{.roomType}}
+  Descripción actual:
+  {{.currentDescription}}
+fallback: |
+  {{.currentDescription}}

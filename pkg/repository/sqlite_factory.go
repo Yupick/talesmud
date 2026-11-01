@@ -44,6 +44,10 @@ func (f *SQLiteFactory) NPCs() NPCsRepository {
 	return NewSQLiteNPCsRepository(f.client)
 }
 
+func (f *SQLiteFactory) NPCTemplates() NPCTemplatesRepository {
+	return NewSQLiteNPCTemplatesRepository(f.client)
+}
+
 func (f *SQLiteFactory) NPCSpawners() NPCSpawnersRepository {
 	return NewSQLiteNPCSpawnersRepository(f.client)
 }
@@ -86,6 +90,22 @@ func (f *SQLiteFactory) ContentHealth() ContentHealthRepository {
 
 func (f *SQLiteFactory) Audit() AuditRepository {
 	return NewSQLiteAuditRepository(f.client)
+}
+
+func (f *SQLiteFactory) Clans() ClanRepository {
+	return NewSQLiteClanRepository(f.client)
+}
+
+func (f *SQLiteFactory) DMChannels() DMRepository {
+	return NewSQLiteDMChannelRepository(f.client)
+}
+
+func (f *SQLiteFactory) NPCMemories() NPCMemoriesRepository {
+	return NewSQLiteNPCMemoryRepository(f.client)
+}
+
+func (f *SQLiteFactory) Dungeons() DungeonsRepository {
+	return NewSQLiteDungeonsRepository(f.client)
 }
 
 func (f *SQLiteFactory) Close() error {

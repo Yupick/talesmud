@@ -1,0 +1,27 @@
+id: character.name
+version: "1.0.0"
+task: character
+output: text
+temperature: 0.9
+maxTokens: 60
+timeoutSeconds: 15
+retry: 0
+variables:
+  - { name: templateName, required: false, untrusted: true, maxRunes: 80, label: Template }
+  - { name: archetype,    required: false, untrusted: true, maxRunes: 80, label: Archetype }
+  - { name: race,         required: false, untrusted: true, maxRunes: 80, label: Race }
+  - { name: class,        required: false, untrusted: true, maxRunes: 80, label: Class }
+  - { name: originArea,   required: false, untrusted: true, maxRunes: 80, label: Origin }
+  - { name: backstory,    required: false, untrusted: true, maxRunes: 500, label: Backstory hint }
+system: |
+  You are a fantasy name generator for a MUD (multi-user dungeon) game.
+  Generate a single character name that fits the given archetype, race, and class.
+  Rules:
+  - Return ONLY the name, nothing else (no quotes, no explanation, no punctuation except hyphens or apostrophes within the name)
+  - The name should be 1-3 words maximum
+  - It should sound appropriate for the fantasy race and class
+  - It should be memorable and easy to type
+  - Do not use famous existing character names from popular media
+user: |
+  Generate a fantasy character name.
+fallback: ""

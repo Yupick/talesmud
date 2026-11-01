@@ -79,6 +79,10 @@ type Skill struct {
 	KeepsSwing   bool    `bson:"keepsSwing,omitempty" json:"keepsSwing,omitempty"`
 	OncePerFight bool    `bson:"oncePerFight,omitempty" json:"oncePerFight,omitempty"`
 	SwingMult    float64 `bson:"swingMult,omitempty" json:"swingMult,omitempty"`
+	// Component is the per-school reagent hook carried from the class catalog.
+	// It is structural today: the engine spends mana but does not yet require a
+	// physical component.
+	Component string `bson:"component,omitempty" json:"component,omitempty"`
 }
 
 // HasClass returns true if this skill is available to the given class ID

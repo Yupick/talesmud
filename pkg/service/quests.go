@@ -1081,13 +1081,14 @@ func (s *questsService) GrantQuestRewards(characterID, questID string) ([]string
 		return nil, nil, err
 	}
 
-	// 3. Award XP
+	// 3. Award XP. Prestige scales quest XP (+5% per prestige level).
 	if quest.Rewards.XP > 0 {
-		char.XP += quest.Rewards.XP
+		awardedXP := int32(float64(quest.Rewards.XP) * char.PrestigeMultiplier())
+		char.XP += awardedXP
 		log.WithFields(log.Fields{
 			"characterID": characterID,
 			"questID":     questID,
-			"xpAwarded":   quest.Rewards.XP,
+			"xpAwarded":   awardedXP,
 		}).Info("Awarded quest XP")
 	}
 

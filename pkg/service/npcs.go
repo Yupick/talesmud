@@ -147,6 +147,10 @@ func (srv *npcsService) SpawnFromTemplate(templateID, roomID string) (*npc.NPC, 
 		IdleDialogID:      template.IdleDialogID,
 		IdleDialogTimeout: template.IdleDialogTimeout,
 
+		// Free-form dialogue configuration (deep copy so instances cannot
+		// mutate the template's goals/secrets/relations).
+		LLM: template.LLM.Clone(),
+
 		// Copy traits
 		EnemyTrait:    template.EnemyTrait,
 		MerchantTrait: deepCopyMerchantTrait(template.MerchantTrait),

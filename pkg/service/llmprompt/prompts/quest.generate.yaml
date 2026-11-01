@@ -1,0 +1,35 @@
+id: quest.generate
+version: "1.0.0"
+task: quest
+output: json
+temperature: 0.7
+maxTokens: 1200
+timeoutSeconds: 45
+retry: 1
+variables:
+  - { name: area,        required: true,  untrusted: false }
+  - { name: level,       required: false, untrusted: false }
+  - { name: sourceNpcId, required: false, untrusted: false }
+  - { name: catalog,     required: true,  untrusted: false }
+  - { name: maxXP,       required: false, untrusted: false }
+  - { name: maxGold,     required: false, untrusted: false }
+  - { name: theme,       required: false, untrusted: true, maxRunes: 120, label: Theme }
+system: |
+  Eres diseñador de quests para un dungeon-crawler MUD en español.
+  Devuelve SOLO JSON válido, sin texto adicional ni bloques de código, con esta forma exacta:
+  {"quests":[{"name":str,"description":str,"category":"main|side",
+    "source":{"type":"npc","npcId":str},"objectives":[{"id":str,"type":"kill|collect|deliver|visit|talk","description":str,"targetId":str,"amount":int}],
+    "rewards":{"xp":int,"gold":int}}]}
+  Reglas:
+  - Usa EXCLUSIVAMENTE ids del catálogo; jamás inventes ids.
+  - Máximo 4 objectives, amount entre 1 y 10.
+  - xp <= {{if .maxXP}}{{.maxXP}}{{else}}500{{end}} y gold <= {{if .maxGold}}{{.maxGold}}{{else}}200{{end}}.
+  - category debe ser "main" o "side".
+  - El id de cada objective debe ser único (obj1, obj2, ...).
+user: |
+  Zona destino: {{.area}}
+  Nivel objetivo: {{if .level}}{{.level}}{{else}}1{{end}}
+  NPC oferente: {{.sourceNpcId}}
+  CATÁLOGO DEL MUNDO (fuente de verdad):
+  {{.catalog}}
+fallback: ""

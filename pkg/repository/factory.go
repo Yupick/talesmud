@@ -10,6 +10,7 @@ type Factory interface {
 	Items() ItemsRepository
 	CharacterTemplates() CharacterTemplatesRepository
 	NPCs() NPCsRepository
+	NPCTemplates() NPCTemplatesRepository
 	NPCSpawners() NPCSpawnersRepository
 	Dialogs() DialogsRepository
 	Conversations() ConversationsRepository
@@ -21,5 +22,9 @@ type Factory interface {
 	GuestStats() GuestStatsRepository
 	ContentHealth() ContentHealthRepository
 	Audit() AuditRepository
+	Clans() ClanRepository
+	DMChannels() DMRepository
+	NPCMemories() NPCMemoriesRepository
+	Dungeons() DungeonsRepository
 	Close() error
 }

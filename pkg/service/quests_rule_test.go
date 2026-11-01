@@ -551,7 +551,16 @@ func (f *fakeQuestValidationFacade) CharacterTemplatesRepo() repository.Characte
 func (f *fakeQuestValidationFacade) GuestService() GuestService           { return nil }
 func (f *fakeQuestValidationFacade) GuestStatsService() GuestStatsService { return nil }
 func (f *fakeQuestValidationFacade) AuditService() AuditService           { return nil }
-func (f *fakeQuestValidationFacade) Runner() scripts.ScriptRunner         { return nil }
+func (f *fakeQuestValidationFacade) ClansService() ClansService           { return nil }
+func (f *fakeQuestValidationFacade) DMService() DMService                 { return nil }
+func (f *fakeQuestValidationFacade) NPCMemoriesService() NPCMemoriesService {
+	return nil
+}
+func (f *fakeQuestValidationFacade) DungeonsService() DungeonsService { return nil }
+func (f *fakeQuestValidationFacade) NPCTemplatesService() NPCTemplatesService {
+	return nil
+}
+func (f *fakeQuestValidationFacade) Runner() scripts.ScriptRunner { return nil }
 
 type fakeQuestsRepo struct {
 	quests map[string]*quests.Quest

@@ -9,6 +9,8 @@ import (
 	"net/http"
 	"os"
 	"time"
+
+	"github.com/talesmud/talesmud/pkg/service/llmopts"
 )
 
 const (
@@ -63,14 +65,24 @@ func NewClient() *Client {
 
 // Complete sends a chat completion request and returns the text content.
 func (c *Client) Complete(ctx context.Context, systemPrompt, userPrompt string, temperature float64) (string, error) {
+	return c.CompleteWith(ctx, systemPrompt, userPrompt, llmopts.Options{Temperature: temperature})
+}
+
+// CompleteWith is the additive extension that also varies max_tokens. A zero
+// MaxTokens keeps the provider default (300).
+func (c *Client) CompleteWith(ctx context.Context, systemPrompt, userPrompt string, opts llmopts.Options) (string, error) {
+	limit := 300
+	if opts.MaxTokens > 0 {
+		limit = opts.MaxTokens
+	}
 	req := Request{
 		Model: c.model,
 		Messages: []Message{
 			{Role: "system", Content: systemPrompt},
 			{Role: "user", Content: userPrompt},
 		},
-		Temperature: temperature,
-		MaxTokens:   300,
+		Temperature: opts.Temperature,
+		MaxTokens:   limit,
 	}
 
 	body, err := json.Marshal(req)
@@ -97,7 +109,10 @@ func (c *Client) Complete(ctx context.Context, systemPrompt, userPrompt string, 
 	}
 
 	if resp.StatusCode != http.StatusOK {
-		return "", fmt.Errorf("groq api returned %d: %s", resp.StatusCode, string(respBody))
+		// The upstream body is deliberately not echoed: handlers return
+		// err.Error() to HTTP clients, and provider bodies can carry request
+		// details. The status code is enough to diagnose the failure.
+		return "", fmt.Errorf("groq api returned status %d", resp.StatusCode)
 	}
 
 	var groqResp Response
@@ -110,4 +125,12 @@ func (c *Client) Complete(ctx context.Context, systemPrompt, userPrompt string, 
 	}
 
 	return groqResp.Choices[0].Message.Content, nil
+}
+
+// Model reports the configured model name for logs and cache keys.
+func (c *Client) Model() string {
+	if c == nil {
+		return ""
+	}
+	return c.model
 }

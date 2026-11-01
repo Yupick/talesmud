@@ -9,6 +9,8 @@ import (
 
 	log "github.com/sirupsen/logrus"
 	"gopkg.in/yaml.v3"
+
+	"github.com/talesmud/talesmud/pkg/talents"
 )
 
 func init() {
@@ -91,6 +93,9 @@ func validate(d *Def, path string) error {
 	if d.HPMultiplier < 0 {
 		return fmt.Errorf("%s: hp_multiplier", path)
 	}
+	if d.School != "" && !KnownSchool(d.School) {
+		return fmt.Errorf("%s: class %s has unknown school %q", path, d.ID, d.School)
+	}
 	for _, s := range d.Skills {
 		if s.ID == "" || s.Name == "" {
 			return fmt.Errorf("%s: skill needs id and name", path)
@@ -98,6 +103,20 @@ func validate(d *Def, path string) error {
 		if !KnownEffects[norm(s.Effect)] {
 			return fmt.Errorf("%s: skill %s has unknown effect %q", path, s.ID, s.Effect)
 		}
+	}
+	talentSeen := map[string]bool{}
+	for _, id := range d.Talents {
+		id = strings.TrimSpace(id)
+		if id == "" {
+			return fmt.Errorf("%s: class %s has an empty talent id", path, d.ID)
+		}
+		if _, ok := talents.Lookup(id); !ok {
+			return fmt.Errorf("%s: class %s has unknown talent %q", path, d.ID, id)
+		}
+		if talentSeen[norm(id)] {
+			return fmt.Errorf("%s: class %s lists talent %q twice", path, d.ID, id)
+		}
+		talentSeen[norm(id)] = true
 	}
 	return nil
 }

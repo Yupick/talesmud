@@ -27,6 +27,7 @@ type Party struct {
 	Created           time.Time `json:"created,omitempty"`
 	Characters        []string  `json:"characters,omitempty"`
 	LeaderCharacterID string    `json:"leaderCharacterId,omitempty"`
+	LootRule          string    `json:"lootRule,omitempty"`
 }
 
 // EnsureLeader sets LeaderCharacterID to the first member when empty/invalid.

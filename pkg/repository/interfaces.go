@@ -5,8 +5,11 @@ import (
 
 	"github.com/talesmud/talesmud/pkg/entities"
 	"github.com/talesmud/talesmud/pkg/entities/characters"
+	"github.com/talesmud/talesmud/pkg/entities/clan"
 	"github.com/talesmud/talesmud/pkg/entities/conversations"
 	"github.com/talesmud/talesmud/pkg/entities/dialogs"
+	"github.com/talesmud/talesmud/pkg/entities/dm"
+	"github.com/talesmud/talesmud/pkg/entities/dungeons"
 	"github.com/talesmud/talesmud/pkg/entities/items"
 	npc "github.com/talesmud/talesmud/pkg/entities/npcs"
 	"github.com/talesmud/talesmud/pkg/entities/quests"
@@ -154,6 +157,20 @@ type NPCsRepository interface {
 	Drop() error
 }
 
+// NPCTemplatesRepository provides access to persisted NPC/mob templates
+// (FASE 5.3). These are the Creator-authored blueprints backed by the
+// npc_templates table, distinct from the runtime NPC entities.
+type NPCTemplatesRepository interface {
+	Drop() error
+	FindByID(id string) (*npc.NPCTemplate, error)
+	FindByName(name string) ([]*npc.NPCTemplate, error)
+	FindByRole(role string) ([]*npc.NPCTemplate, error)
+	FindAll() ([]*npc.NPCTemplate, error)
+	Update(id string, template *npc.NPCTemplate) error
+	Delete(id string) error
+	Create(template *npc.NPCTemplate) (*npc.NPCTemplate, error)
+}
+
 // DialogsRepository provides access to dialog data.
 type DialogsRepository interface {
 	FindAll() ([]*dialogs.Dialog, error)
@@ -264,4 +281,103 @@ type GuestStatsRepository interface {
 type ContentHealthRepository interface {
 	Get() ([]byte, error)
 	Save(data []byte) error
+}
+
+// ClanRepository provides access to clan data, membership, invites and bank.
+type ClanRepository interface {
+	// Basic CRUD
+	Drop() error
+	FindByID(id string) (*clan.Clan, error)
+	FindByName(name string) ([]*clan.Clan, error)
+	FindByTag(tag string) ([]*clan.Clan, error)
+	FindByLeader(leaderCharID string) ([]*clan.Clan, error)
+	FindAll() ([]*clan.Clan, error)
+	FindAllActive() ([]*clan.Clan, error)
+	Store(cl *clan.Clan) (*clan.Clan, error)
+	Update(id string, cl *clan.Clan) error
+	Delete(id string) error
+
+	// Membership. A character may only belong to one clan at a time; AddMember
+	// returns an error when the character already has a membership.
+	AddMember(m *clan.ClanMember) error
+	RemoveMember(clanID, characterID string) error
+	UpdateMemberRank(clanID, characterID string, rank clan.Rank) error
+	FindMember(clanID, characterID string) (*clan.ClanMember, error)
+	FindMembersByClan(clanID string) ([]*clan.ClanMember, error)
+	FindMembersByCharacter(characterID string) ([]*clan.ClanMember, error)
+	UpdateMemberContribution(clanID, characterID string, amount int64) error
+
+	// Invites
+	CreateInvite(inv *clan.ClanInvite) (*clan.ClanInvite, error)
+	FindInvite(clanID, characterID string) (*clan.ClanInvite, error)
+	FindInvitesByClan(clanID string) ([]*clan.ClanInvite, error)
+	FindInvitesByCharacter(characterID string) ([]*clan.ClanInvite, error)
+	UpdateInviteStatus(clanID, characterID string, status string) error
+	DeleteInvite(clanID, characterID string) error
+
+	// Clan bank
+	GetBankBalance(clanID string) (int64, error)
+	Deposit(clanID, characterID string, amount int64, note string) error
+	Withdraw(clanID, characterID string, amount int64, note string) error
+	GetBankLedger(clanID string, limit int) ([]*clan.ClanBankLedger, error)
+
+	// Level and XP
+	AddXP(clanID string, amount int64) error
+	UpdateLevel(clanID string, level int) error
+
+	// Helpers
+	IsCharacterInClan(characterID string) (bool, error)
+	GetCharacterClan(characterID string) (*clan.Clan, error)
+}
+
+// DMRepository provides access to private conversation channels and messages.
+type DMRepository interface {
+	// Channels
+	Drop() error
+	FindByID(id string) (*dm.DMChannel, error)
+	FindOrCreateChannel(participantA, participantB string) (*dm.DMChannel, error)
+	FindChannelBetween(participantA, participantB string) (*dm.DMChannel, error)
+	FindChannelsByCharacter(characterID string) ([]*dm.DMChannel, error)
+	UpdateLastMessage(channelID, messageID string, timestamp time.Time) error
+	IncrementUnread(channelID, recipient string) error
+	MarkRead(channelID, reader string) error
+	GetUnreadCount(channelID, reader string) (int, error)
+
+	// Messages
+	StoreMessage(msg *dm.DMMessage) (*dm.DMMessage, error)
+	FindMessageByID(id string) (*dm.DMMessage, error)
+	FindMessagesByChannel(channelID string, limit int) ([]*dm.DMMessage, error)
+	FindMessagesSince(channelID string, since time.Time) ([]*dm.DMMessage, error)
+	MarkMessageRead(messageID string) error
+	DeleteMessage(messageID string) error
+}
+
+// DMChannelRepository is the Phase 4 schema name for DMRepository.
+type DMChannelRepository = DMRepository
+
+// NPCMemoriesRepository provides access to the long-term memories LLM-driven
+// NPCs keep about characters (npc_memories table, docs/design/PHASE6_LLM.md
+// §6.3). The storage key is "<npcTemplateID>::<characterID>" (MemoryID).
+type NPCMemoriesRepository interface {
+	Drop() error
+	Get(npcID, characterID string) (*NPCMemory, error) // nil, nil when absent
+	Upsert(m *NPCMemory) (*NPCMemory, error)           // create or replace
+	Update(npcID, characterID string, m *NPCMemory) error
+	Delete(npcID, characterID string) error
+	DeleteForNPC(npcID string) error // admin: forget everything about an NPC
+	FindByNPC(npcID string) ([]*NPCMemory, error)
+	FindByCharacter(characterID string) ([]*NPCMemory, error)
+}
+
+// DungeonsRepository provides access to persisted dungeon definitions
+// (FASE 5.1 dungeon builder). Definition holds the raw exportDefinition JSON.
+type DungeonsRepository interface {
+	Drop() error
+	Create(def *dungeons.DungeonDefinition) (*dungeons.DungeonDefinition, error)
+	Update(id string, def *dungeons.DungeonDefinition) error
+	FindByID(id string) (*dungeons.DungeonDefinition, error)
+	FindAll() ([]*dungeons.DungeonDefinition, error)
+	FindByName(name string) ([]*dungeons.DungeonDefinition, error)
+	FindByAuthor(author string) ([]*dungeons.DungeonDefinition, error)
+	Delete(id string) error
 }

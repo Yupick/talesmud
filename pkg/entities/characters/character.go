@@ -84,6 +84,16 @@ func NewAttribute(name, short string, value int32) Attribute {
 	}
 }
 
+// CharacterTalents is the per-character talent state. It travels inside the
+// characters.data JSON document, so no extra table or migration is needed.
+// A legacy character loads with the zero value: no unspent points, an empty
+// (nil) spent map, and prestige 0. Every helper here treats nil as empty.
+type CharacterTalents struct {
+	Points   int32            `bson:"points" json:"points"`             // Unspent talent points
+	Spent    map[string]int32 `bson:"spent,omitempty" json:"spent"`     // talentID -> rank
+	Prestige int32            `bson:"prestige" json:"prestige"`         // prestige level (0 = none)
+}
+
 // Character data
 type Character struct {
 	*entities.Entity   `bson:",inline"`
@@ -116,6 +126,10 @@ type Character struct {
 	// Distributable attribute points (earned on level-up, spent by player)
 	UnspentAttributePoints int32            `bson:"unspentAttributePoints" json:"unspentAttributePoints"`
 	SpentAttributePoints   map[string]int32 `bson:"spentAttributePoints,omitempty" json:"spentAttributePoints,omitempty"`
+
+	// Talents are milestone upgrades (one point every five levels) plus one
+	// point per prestige. Stored in the character JSON document (no table).
+	Talents CharacterTalents `bson:"talents,omitempty" json:"talents"`
 
 	// complex character fields
 	Inventory     items.Inventory                `bson:"inventory" json:"inventory"`

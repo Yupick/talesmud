@@ -63,6 +63,12 @@ type NPC struct {
 	// DialogID references the main interactive dialog for this NPC (stored in dialogs collection)
 	DialogID string `bson:"dialogID,omitempty" json:"dialogID,omitempty"`
 
+	// LLM enables free-form, model-driven dialogue for this NPC (Phase 6,
+	// Corte B). It is additive and omitempty, so legacy NPCs serialized before
+	// this field keep working unchanged. A nil or disabled config means the NPC
+	// behaves exactly as before.
+	LLM *LLMConfig `bson:"llm,omitempty" json:"llm,omitempty"`
+
 	// IdleDialogID references an optional idle dialog that triggers automatically
 	IdleDialogID      string        `bson:"idleDialogID,omitempty" json:"idleDialogID,omitempty"`
 	IdleDialogTimeout time.Duration `bson:"idleDialogTimeout,omitempty" json:"idleDialogTimeout,omitempty"`

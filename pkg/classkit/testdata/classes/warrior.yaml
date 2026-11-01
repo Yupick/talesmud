@@ -1,5 +1,6 @@
 id: warrior
 name: Sentinel
+school: martial
 description: "The door. You stand in it until they don't. Brace once when a blow comes in."
 armor_type: Plate
 combat_type: Melee

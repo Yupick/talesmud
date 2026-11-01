@@ -166,6 +166,26 @@ func (y *YAMLNPC) ToEntity() *npc.NPC {
 		PatrolPath:       append([]string(nil), y.PatrolPath...),
 		State:            "idle",
 	}
+	if y.LLM != nil {
+		if y.LLM != nil {
+			copied := *y.LLM
+			if y.LLM.Personality != nil {
+				p := *y.LLM.Personality
+				copied.Personality = &p
+			}
+			if len(y.LLM.Goals) > 0 {
+				copied.Goals = append([]string(nil), y.LLM.Goals...)
+			}
+			if len(y.LLM.Secrets) > 0 {
+				copied.Secrets = append([]string(nil), y.LLM.Secrets...)
+			}
+			if len(y.LLM.Relations) > 0 {
+				copied.Relations = make([]npc.LLMRelation, len(y.LLM.Relations))
+				copy(copied.Relations, y.LLM.Relations)
+			}
+			n.LLM = &copied
+		}
+	}
 
 	// For unique NPCs (non-templates), set current room to spawn room
 	if !isTemplate {

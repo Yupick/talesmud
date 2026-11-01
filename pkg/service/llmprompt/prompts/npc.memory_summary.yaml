@@ -1,0 +1,31 @@
+id: npc.memory_summary
+version: "1.0.0"
+task: npc
+output: json
+temperature: 0.2
+maxTokens: 200
+timeoutSeconds: 10
+retry: 1
+variables:
+  - { name: npcName,        required: true,  untrusted: false }
+  - { name: persona,        required: false, untrusted: false }
+  - { name: facts,          required: false, untrusted: false }
+  - { name: lastUserLine,   required: false, untrusted: false }
+  - { name: existingSummary, required: false, untrusted: false }
+system: |
+  Resume la memoria a largo plazo entre un NPC y un jugador para uso en diálogo.
+  Devuelve SOLO JSON válido con esta forma exacta:
+  {"summary": str}
+  Reglas:
+  - summary: máximo 400 runas, conciso, en español, en personaje ligero.
+  - Usa solo hechos relevantes para futuras conversaciones.
+  - No inventes detalles, no añadas diálogo.
+  - Si no hay información útil, devuelve {"summary": ""}.
+user: |
+  NPC: {{.npcName}}
+  Persona: {{.persona}}
+  Hechos: {{.facts}}
+  Última pregunta del jugador: {{.lastUserLine}}
+  Resumen existente: {{.existingSummary}}
+fallback: |
+  {"summary": ""}

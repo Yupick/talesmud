@@ -25,6 +25,11 @@ type Facade interface {
 	GuestService() GuestService
 	GuestStatsService() GuestStatsService
 	AuditService() AuditService
+	ClansService() ClansService
+	DMService() DMService
+	NPCMemoriesService() NPCMemoriesService
+	DungeonsService() DungeonsService
+	NPCTemplatesService() NPCTemplatesService
 
 	Runner() scripts.ScriptRunner
 }
@@ -47,6 +52,11 @@ type facade struct {
 	gs    GuestService
 	gss   GuestStatsService
 	aud   AuditService
+	cls   ClansService
+	dms   DMService
+	npcm  NPCMemoriesService
+	dgs   DungeonsService
+	nts   NPCTemplatesService
 	sr    scripts.ScriptRunner
 	repos repository.Factory
 }
@@ -98,6 +108,11 @@ func NewFacade(repos repository.Factory, runner scripts.ScriptRunner) Facade {
 		qs:    qs,
 		skls:  skls,
 		aud:   NewAuditService(repos.Audit()),
+		cls:   NewClansService(repos.Clans()),
+		dms:   NewDMService(repos.DMChannels()),
+		npcm:  NewNPCMemoriesService(repos.NPCMemories()),
+		dgs:   NewDungeonsService(repos.Dungeons()),
+		nts:   NewNPCTemplatesService(repos.NPCTemplates()),
 		sr:    runner,
 		repos: repos,
 	}
@@ -183,4 +198,24 @@ func (f *facade) GuestStatsService() GuestStatsService {
 
 func (f *facade) AuditService() AuditService {
 	return f.aud
+}
+
+func (f *facade) ClansService() ClansService {
+	return f.cls
+}
+
+func (f *facade) DMService() DMService {
+	return f.dms
+}
+
+func (f *facade) NPCMemoriesService() NPCMemoriesService {
+	return f.npcm
+}
+
+func (f *facade) DungeonsService() DungeonsService {
+	return f.dgs
+}
+
+func (f *facade) NPCTemplatesService() NPCTemplatesService {
+	return f.nts
 }

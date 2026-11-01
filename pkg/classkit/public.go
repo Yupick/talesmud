@@ -22,6 +22,7 @@ type ClientSkill struct {
 	Target         string   `json:"target"`
 	ResourceType   string   `json:"resourceType"`
 	ManaCost       int      `json:"manaCost"`
+	Component      string   `json:"component,omitempty"`
 	Effect         string   `json:"effect"`
 }
 
@@ -94,12 +95,17 @@ func ClientView(base []RaceInfo) ClientPayload {
 			if target == "" {
 				target = "enemy"
 			}
+			resource := "cooldown"
+			if s.ManaCost > 0 {
+				resource = "mana"
+			}
 			skills = append(skills, ClientSkill{
 				ID: s.ID, Name: s.Name, Description: s.Tooltip,
 				ClassIDs: []string{d.skillClass()}, LevelRequired: s.Level,
 				Kit: s.Effect, KeepsSwing: s.KeepsSwing, OncePerFight: s.OncePerFight,
 				CooldownRounds: s.Cooldown, SwingMult: s.Multiplier, Target: target,
-				ResourceType: "cooldown", Effect: "damage",
+				ResourceType: resource, ManaCost: s.ManaCost, Component: s.Component,
+				Effect: "damage",
 			})
 		}
 		templateID := ""

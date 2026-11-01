@@ -1,6 +1,10 @@
 package classkit
 
-import "sync"
+import (
+	"sync"
+
+	"github.com/talesmud/talesmud/pkg/talents"
+)
 
 var (
 	mu        sync.RWMutex
@@ -264,6 +268,20 @@ func BoltRig(id string) (bolt, rig int) {
 		return 0, 0
 	}
 	return d.BoltCharges, d.RigCharges
+}
+
+// TalentsForClass returns the talent ids a class may learn. An explicit
+// `talents:` list on the class wins; otherwise the class offers every talent
+// of its school. A class with no school and no explicit list has none.
+func TalentsForClass(id string) []string {
+	d := resolve(id)
+	if d == nil {
+		return nil
+	}
+	if len(d.Talents) > 0 {
+		return append([]string(nil), d.Talents...)
+	}
+	return talents.IDs(talents.ForSchool(d.School))
 }
 
 // Skills flattens every kit skill in class order.

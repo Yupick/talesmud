@@ -59,6 +59,10 @@ func (s *partiesService) CreateParty(createParty *CreatePartyDTO) (*entities.Par
 		Created:           time.Now(),
 		Characters:        createParty.Characters,
 		LeaderCharacterID: createParty.LeaderCharacterID,
+		LootRule:          createParty.LootRule,
+	}
+	if party.LootRule == "" {
+		party.LootRule = "free"
 	}
 	if party.LeaderCharacterID == "" && len(party.Characters) > 0 {
 		party.LeaderCharacterID = party.Characters[0]
@@ -85,6 +89,9 @@ func (s *partiesService) Store(party *entities.Party) (*entities.Party, error) {
 	}
 	if party.Created.IsZero() {
 		party.Created = time.Now()
+	}
+	if party.LootRule == "" {
+		party.LootRule = "free"
 	}
 	return s.repo.Store(party)
 }

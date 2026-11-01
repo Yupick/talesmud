@@ -190,6 +190,7 @@ type YAMLNPC struct {
 	EnemyTrait    *YAMLEnemyTrait    `yaml:"enemyTrait"`
 	MerchantTrait *YAMLMerchantTrait `yaml:"merchantTrait"`
 	Meta          YAMLNPCMeta        `yaml:"meta"`
+	LLM           *npc.LLMConfig     `yaml:"llm,omitempty"`
 }
 
 // YAMLRange is a min/max pair (e.g. enemy goldDrop).
