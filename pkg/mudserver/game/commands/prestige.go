@@ -5,8 +5,8 @@ import (
 	"strings"
 
 	"github.com/talesmud/talesmud/pkg/mudserver/game/def"
-	"github.com/talesmud/talesmud/pkg/mudserver/game/leveling"
 	"github.com/talesmud/talesmud/pkg/mudserver/game/messages"
+	"github.com/talesmud/talesmud/pkg/ruleset"
 )
 
 // PrestigeCommand resets a maxed character to level 1 in exchange for a
@@ -38,12 +38,16 @@ func (command *PrestigeCommand) status(game def.GameCtrl, message *messages.Mess
 	char := message.Character
 	var sb strings.Builder
 	sb.WriteString("\n═══════ PRESTIGE ═══════\n\n")
+	cap := ruleset.LevelCap()
+	if cap <= 0 {
+		cap = 50
+	}
 	sb.WriteString(fmt.Sprintf("Current Prestige: %d (+%.0f%% XP)\n",
 		char.Talents.Prestige, (char.PrestigeMultiplier()-1)*100))
-	sb.WriteString(fmt.Sprintf("Level: %d / %d\n\n", char.Level, leveling.MaxLevel))
+	sb.WriteString(fmt.Sprintf("Level: %d / %d\n\n", char.Level, cap))
 
-	if char.Level < leveling.MaxLevel {
-		sb.WriteString(fmt.Sprintf("You must reach level %d before you can prestige.\n", leveling.MaxLevel))
+	if char.Level < cap {
+		sb.WriteString(fmt.Sprintf("You must reach level %d before you can prestige.\n", cap))
 	} else {
 		sb.WriteString("Prestige is available!\n")
 		sb.WriteString("It will reset you to level 1 with class base attributes, and grant:\n")
@@ -58,10 +62,14 @@ func (command *PrestigeCommand) status(game def.GameCtrl, message *messages.Mess
 
 func (command *PrestigeCommand) confirm(game def.GameCtrl, message *messages.Message) {
 	char := message.Character
+	cap := ruleset.LevelCap()
+	if cap <= 0 {
+		cap = 50
+	}
 
-	if char.Level < leveling.MaxLevel {
+	if char.Level < cap {
 		game.SendMessage() <- message.Reply(fmt.Sprintf(
-			"You must reach level %d before you can prestige.", leveling.MaxLevel))
+			"You must reach level %d before you can prestige.", cap))
 		return
 	}
 

@@ -9,7 +9,7 @@ import (
 )
 
 const (
-	MaxLevel = 50 // Hard level cap
+	MaxLevel = 50 // Hard level cap (prefer ruleset.LevelCap() for runtime; kept for compat)
 
 	// TalentMilestoneInterval is the level step that awards one talent point.
 	// Levels 5, 10, ... 50 therefore grant 10 points before prestige.
