@@ -57,7 +57,7 @@ ignorar campos y tipos de mensaje desconocidos.
 | POST | `/api/device/poll` | `{device_code}` → `200 {token, expires_in}` o 400 con `error` (`pending`/`slow_down`/`denied`/`expired`) |
 | GET | `/api/ssh/info` | Info pública del gate SSH: `{"enabled": false}` o detalle |
 | GET | `/api/server-info` | `200 {serverName, envLabel, host}` |
-| GET | `/api/classes` | Catálogo público de razas/clases (sin números de balance) |
+| GET | `/api/classes` | Catálogo de razas/clases (sin números de balance); con token creator/admin devuelve el DTO completo del editor |
 | GET | `/api/templates/characters` | Plantillas legacy de creación (hardcoded) |
 | GET | `/api/item-slots` · `/api/item-qualities` · `/api/item-types` · `/api/item-subtypes` | Enums de items |
 | GET | `/api/room-of-the-day` | Sala destacada del día |
@@ -242,6 +242,9 @@ array; GET `:id` → entidad (404 si falta); POST → entidad creada; PUT `:id` 
 | GET | `/api/script-types` | Tipos soportados |
 | POST | `/api/run-script/:id` | Ejecuta con ctx JSON opcional → `{success, result, error, duration, durationMs}` |
 | GET/POST/PUT/DELETE | `/api/npcs` · `/api/npcs/:id` | `GET` filtra `roomID`, `isTemplate`; `GET /api/npcs/templates`; `GET /api/npcs/:id/inspect`; `POST /api/npcs/:id/spawn` → instancia viva |
+| GET | `/api/npc-templates` · `/api/npc-templates/:id` | Blueprints `npc_templates` (autenticado; secretos `llm` solo creator/admin) |
+| POST/PUT/DELETE | `/api/npc-templates` · `/api/npc-templates/:id` | CRUD creator; con `spawnRoomId` + `spawnCount` hace spawn best-effort y devuelve `spawn{instanceId,name,roomId}` |
+| POST | `/api/npc-templates/:id/spawn` | Fuerza una instancia del blueprint en su `spawnRoomId` (creator); 400 si falta sala/config, 503 si el juego vivo no está disponible |
 | GET/POST/PUT/DELETE | `/api/spawners` · `/api/spawners/:id` | Spawners de NPC |
 | GET/POST/PUT/DELETE | `/api/dialogs` · `/api/dialogs/:id` | Árboles de diálogo |
 | GET/POST/PUT/DELETE | `/api/loottables` · `/api/loottables/:id` | Tablas de botín |
@@ -249,7 +252,9 @@ array; GET `:id` → entidad (404 si falta); POST → entidad creada; PUT `:id` 
 | POST | `/api/loot-tables/:id/roll` | **Preview** de frecuencias (creator, sin audit ni escritura): query `n` (1–10000, default 1000), `seed`, `playerLevel`, `boss` (0/1) |
 | GET/POST/PUT/DELETE | `/api/quests` · `/api/quests/:id` | Validación previa al guardado (400 con issues) |
 | GET | `/api/quests/:id/debug` | Vista de debug (personajes con la quest) |
-| GET/POST/PUT/DELETE | `/api/skills` · `/api/skills/:id` | Habilidades |
+| GET/POST/PUT/DELETE | `/api/skills` · `/api/skills/:id` | Habilidades; `/api/spells` y `/api/spells/:id` son alias de las mismas rutas |
+| GET/POST/PUT/DELETE | `/api/classes` · `/api/classes/:id` | Clases del class-kit (`data/classes/*.yaml`); `GET` sin token mantiene el catálogo público |
+| POST | `/api/classes/:id/duplicate` | Duplica una clase; body opcional `{id, name}`, por defecto `<id>_copy` |
 | GET/PUT | `/api/settings` | Ajustes del servidor (`ServerSettings`) |
 | GET/POST/DELETE | `/api/backgrounds` · `/api/backgrounds/upload` · `/api/backgrounds/:filename` | Upload multipart, máx 10 MB, png/jpg/jpeg/webp |
 | GET | `/api/world/graph` · `/api/world/rooms-minimal` | Datos del grafo para el mapa del editor |
@@ -445,5 +450,6 @@ desconocidos. El comando `offer` responde por prosa y, al aceptar, emite
   instancian en juego vía API (spawn/compile: no implementado aún).
 - `tell` persistente entre personajes offline: no implementado (ver
   `docs/user/commands.md`).
-- El editor de clases del cliente no tiene CRUD REST (`/api/classes` es solo
-  GET público); ver `docs/user/admin-guide.md`.
+- El editor de clases persiste sus cambios vía CRUD REST en `/api/classes`;
+  los YAML de `data/classes/` son la fuente de verdad y los cambios recargan
+  el catálogo en caliente. Ver `docs/user/admin-guide.md`.

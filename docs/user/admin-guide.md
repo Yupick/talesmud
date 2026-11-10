@@ -57,7 +57,7 @@ SPA del repo (`public/app`), enlace **World Builder** desde el menú de cuenta.
 
 | Tecla | Herramienta | Estado real |
 |---|---|---|
-| `L` | Editor de clases y balance (`ClassesEditor.svelte`) | **experimental, solo local**: ediciones en `localStorage` mientras `CLASS_DEF_CRUD_AVAILABLE = false` (`public/mud-client/src/api/classes.js`); no hay `POST/PUT/DELETE /api/classes`, nada se guarda en el servidor |
+| `L` | Editor de clases y balance (`ClassesEditor.svelte`) | **CRUD REST**: con token creator/admin carga y guarda en `/api/classes` (`GET/POST/PUT/DELETE`, `POST /api/classes/:id/duplicate`). Cada guardado valida y escribe el YAML de `data/classes/`, luego recarga el catálogo; solo cae a `localStorage` si la red no está disponible |
 | `N` | Fábrica de NPCs / mobs (`NpcFactory.svelte`) | plantillas en `localStorage` (`mud-client.npc-factory.v1`, módulo puro `npcFactory.js` con validación de rangos); sincronización REST **best-effort** con token de sesión creador: pull con `GET /api/npcs/templates` y push con `POST /api/npcs` / `PUT /api/npcs/:id`; sin token, solo local |
 | `D` | Dungeon Builder (`DungeonBuilder.svelte`) | **corte inicial FASE 5.1 con persistencia (Batch 19)**: grid clickable, salas, corredores, encuentros y loot tables, validación (entrada→salida por BFS, solapes) y modo de prueba; biblioteca con `localStorage` como fuente de verdad + sincronización **best-effort** a `GET/POST/PUT/DELETE /api/dungeons` con sesión creator (degrada a local con aviso si no hay rol/red) |
 | `A` | Audit log (`AuditPanel.svelte`) | `GET /api/audit` (creator-gated, `limit` ≤ 500); **filtros, búsqueda y CSV se calculan en el navegador** (no hay filtros server-side: el endpoint devuelve las últimas escrituras y ya) |
@@ -66,8 +66,10 @@ SPA del repo (`public/app`), enlace **World Builder** desde el menú de cuenta.
 * **Dungeon Builder (`D`)**: corte inicial de FASE 5.1; con token de creador
   sincroniza la biblioteca contra `/api/dungeons` (mejor esfuerzo) y con
   `localStorage` como respaldo; sin token o con error de red solo local (exporta
-  JSON además). El editor de clases (`L`) no persiste en el servidor; no lo
-  uses como fuente de verdad. Contrato REST completo en [`../API.md`](../API.md).
+  JSON además). El editor de clases (`L`) sí persiste en el servidor cuando hay
+  token creator/admin: valida y escribe los YAML de `data/classes/` vía
+  `/api/classes` y recarga el catálogo en caliente. Contrato REST completo en
+  [`../API.md`](../API.md).
 * El atajo `A` abre el panel en cualquier cuenta, pero sin rol `creator` el
   servidor responde 403 y el panel muestra el error.
 * Canal global `admin <msg>` (`chat admin …`): solo cuentas con rol admin
@@ -136,8 +138,10 @@ Cliente único `pkg/service/llm` con proveedor elegido por entorno:
   validado contra el catálogo del mundo.
 * Narrador DM en combate: cableado en `pkg/server/llm.go` sobre
   `game.SetDMNarrator`; requiere proveedor y respeta el kill switch
-  `LLM_DM_ENABLED` (por defecto activo). El diálogo de NPC con LLM en
-  tiempo de juego sigue **pendiente**.
+  `LLM_DM_ENABLED` (por defecto activo). El modo B (`DMDecision`) está
+  implementado pero **apagado por defecto** (`LLM_DM_DECISION_ENABLED=0`).
+  El diálogo de NPC con LLM en tiempo de juego (`ask`, `talk` con prioridad
+  autoral/quest) está implementado; ver `docs/user/commands.md`.
 * Tablas y checklist: [`../fork-setup.md`](../fork-setup.md) §6 (LLM) y §7.
 
 ---
@@ -165,7 +169,11 @@ Variables de rendimiento y seguridad (opcionales; las de timeout ya están en
 | `HTTP_WRITE_TIMEOUT` | `30s` | ídem; las sesiones WebSocket se salen del servidor y quedan sin este límite |
 | `HTTP_IDLE_TIMEOUT` | `60s` | ídem |
 | `JWKS_TIMEOUT_SECONDS` | `10` | timeout del fetch JWKS de Auth0 (cuerpo acotado a 1 MiB) — `pkg/server/auth.go` |
-| `LLM_DM_ENABLED` | activo | kill switch del narrador DM con LLM — `pkg/server/llm.go` |
+| `LLM_DM_ENABLED` | activo | kill switch del narrador DM en prosa (modo A) — `pkg/server/llm.go` |
+| `LLM_DM_DECISION_ENABLED` | `0` | kill switch del modo B (`DMDecision`: ambush/environmental/narrative); opt-in — `pkg/server/llm.go` |
+| `LLM_DM_DECISION_COOLDOWN_SECONDS` | `60` | cooldown por sala entre decisiones DM |
+| `LLM_DM_DECISION_TIMEOUT_SECONDS` | `8` | timeout de una decisión DM |
+| `LLM_DM_DECISION_MAX_PER_MIN` | `10` | presupuesto global de decisiones DM por minuto |
 
 Seguridad global: `SecurityHeadersMiddleware` añade `X-Content-Type-Options:
 nosniff`, `X-Frame-Options: DENY` y `Referrer-Policy: no-referrer` a todas las

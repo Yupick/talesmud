@@ -93,7 +93,7 @@ raíz que lo referencian.
 | Documento | Contenido | Estado |
 |-----------|-----------|--------|
 | [`user/player-guide.md`](user/player-guide.md) | Guía del jugador en una página: creación (6 clases, escuelas, razas), atajos de teclado (`1`–`9`, Tab, C, M, K, L, I, N, D, A, Escape, `?`), progresión, inventario (peso = aviso visual) y combate; enlaza el resto de `user/` y `player-guide/` | hecho |
-| [`user/admin-guide.md`](user/admin-guide.md) | Guía del admin: roles, panel Creator (`/creator`), herramientas del cliente (editor de clases `L` local, NPC factory `N`, audit `A` con filtros client-side), ops en vivo, `tales -check`, env vars LLM/de rendimiento, seguridad y Docker | hecho |
+| [`user/admin-guide.md`](user/admin-guide.md) | Guía del admin: roles, panel Creator (`/creator`), herramientas del cliente (editor de clases `L` con CRUD REST, NPC factory `N`, audit `A` con filtros client-side), ops en vivo, `tales -check`, env vars LLM/de rendimiento, seguridad y Docker | hecho |
 | [`user/commands.md`](user/commands.md) | Referencia breve de comandos realmente implementados (`talents`, `prestige`, `party loot`, `party readycheck/ready/notready`, `chat` + atajos, `offer` de quests contextuales, `ask` de diálogo libre con NPCs LLM) y de los que **no** existen (`clan`, `tell` persistente) | hecho |
 | [`user/clans.md`](user/clans.md) | Clanes: roles, invitaciones, banco compartido, panel (sin comando `clan`) | hecho |
 | [`user/dms.md`](user/dms.md) | Mensajería privada persistente (`DMChannel`/`DMMessage`, panel) | hecho |

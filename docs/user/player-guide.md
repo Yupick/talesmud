@@ -47,7 +47,7 @@ Para más personajes: `newcharacter` (`nc`); para cambiar de uno ya creado:
 | `C` | panel de clan |
 | `M` | panel de DMs |
 | `K` | spellbook (carga de la barra de acciones) |
-| `L` | editor de clases (herramienta de equipo, experimental/local) |
+| `L` | editor de clases (herramienta de equipo con token creator/admin; guarda el catálogo en el servidor) |
 | `I` | inventario (alternar el panel) |
 | `N` | fábrica de NPCs / mobs (herramienta de equipo, local) |
 | `A` | audit log (equipo) |

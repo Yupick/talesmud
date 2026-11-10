@@ -1371,6 +1371,16 @@ Each class YAML defines the create-screen card (`template`), the balance row, ra
 
 **Magic schools (additive `school` field):** an optional `school` key tags a class with a discipline. Empty means a physical class. Registered ids: `martial` (none), `fire` (Fuego), `ice` (Hielo), `arcane` (Arcano), `divine` (Divino), `nature` (Naturaleza), `shadow` (Sombras). `classkit.SchoolName(id)` returns the display name. An unregistered value fails the load (`class <id> has unknown school "<value>"`); a YAML with no `school` still loads.
 
+**Creator editing and persistence:** the class balance editor saves through
+`GET/POST/PUT/DELETE /api/classes`, `/api/classes/:id`, and
+`POST /api/classes/:id/duplicate`. `pkg/classkit.SaveDef` validates and writes
+the active pack's YAML atomically, then reloads the registry; `DeleteDef`
+removes the matching file. Validation failures return 400 with issues, missing
+classes 404. `GET /api/classes` remains public but returns the full editor DTO
+for creator/admin tokens. The play client's Classes editor uses the authenticated
+routes and only falls back to localStorage on a network error. The `/api/spells`
+and `/api/spells/:id` routes alias the existing skill CRUD.
+
 **Base pack (`data/classes/`):**
 
 | id | Name (es) | School | Role | Kit effects |
@@ -3064,7 +3074,7 @@ Phone-width media queries added to the play shell and overlays:
 - **B18 — quests contextuales en juego:** comando `offer <npc>` / `offer accept|decline` sobre `llmgen.GenerateContextualQuest` (ver "Contextual Quest Offers" en Quest System).
 - **B25–B29 — NPC runtime (FASE 6.3, cortes 1+2+3 y mecanismos B/C):** `ask <npc> [pregunta]`, memoria persistente con resumen LLM, personalidad Big5/objetivos/secretos/relaciones y guard de secreto literal; config por YAML/REST/NPC factory y herencia al spawn; opciones accionables, relación dinámica y feedback. Batch 29 completa el auto-saludo de `talk` (prioridad diálogo autoral → quest → LLM), la continuación por texto libre de una conversación `__llm__` activa/reciente y `kind=quest:<id>` validado. La plantilla `npc.dialogue` v1.0.3 contiene quests disponibles; el modelo no puede crear quests. El cliente expone input libre mediante `DialogMessage.FreeText`.
 
-**Pendiente:** FASE 6.5 modo B (`DMDecision` + eventos ambush/environmental); para FASE 6.3, el anillo de memoria corta, guardrails completos de combate y `FallbackDialogID` como fallback de error. El `talk` autoral y sus quests mantienen prioridad sobre el saludo LLM.
+**FASE 6.5 modo B (B30):** implementado como opt-in (`DMDecision` + ambush/environmental/narrative, kill switch `LLM_DM_DECISION_ENABLED` apagado por defecto). **Pendiente:** para FASE 6.3, el anillo de memoria corta, guardrails completos de combate y `FallbackDialogID` como fallback de error. El `talk` autoral y sus quests mantienen prioridad sobre el saludo LLM.
 
 El texto histórico de los Batches 25–27 que aparece más abajo describe el estado de cada batch en su fecha; el estado vigente tras el Batch 29 es el resumido aquí y en la subsección de deuda anterior.
 
@@ -3273,10 +3283,11 @@ Narrador reactivo en **prosa** que comenta eventos del juego y **nunca muta esta
 - **Flujo (nunca en el tick, nunca muta):** hook → `NotifyDM` → throttles (cooldown por sala/usuario 45 s + presupuesto global 10/min) → semáforo de 2 → goroutine con ctx 8 s, 1 intento → `llmgen.Pipeline` (`TaskDMNarration`, `RequireLLM: true`) → filtro `OutputAllowed` + `cleanDMText` → resultado vuelve por `game.Call` → mensaje `Username: "DM"` a la sala o al usuario. Audiencia global rechazada.
 - **Fallback = silencio:** sin proveedor, con error/timeout, o si el filtro descarta la línea → no se emite nada (`llmgen/fallback.go` devuelve vacío para `TaskDMNarration`; `fallback: ""` en la plantilla; `RequireLLM` impide prosa determinista).
 - **Plantilla:** `pkg/service/llmprompt/prompts/dm.narration.yaml` (una frase corta en español, sin mecánicas ni ids; temperatura 0.9, maxTokens 120, retry 0).
-- **Instalación:** `pkg/server/llm.go` (`installDMNarrator`, no-op sin proveedor o con `LLM_DM_ENABLED` off) → `server.go` al cablear el juego vivo.
-- **Config (`LLM_DM_*`):** `LLM_DM_ENABLED` (kill switch, default 1), `LLM_DM_COOLDOWN_SECONDS` (default 45), `LLM_DM_TIMEOUT_SECONDS` (default 8), `LLM_DM_MAX_PER_MIN` (default 10) — en `.env.example:95-106` y `docker-compose.yml:36-39`; leídas en `game.go:148-176`.
+- **Instalación:** `pkg/server/llm.go` (`installDMNarrator` e `installDMDecision`, ambos no-op sin proveedor o con su kill switch off) → `server.go` al cablear el juego vivo.
+- **Config (`LLM_DM_*`):** `LLM_DM_ENABLED` (kill switch, default 1), `LLM_DM_COOLDOWN_SECONDS` (default 45), `LLM_DM_TIMEOUT_SECONDS` (default 8), `LLM_DM_MAX_PER_MIN` (default 10) — en `.env.example` y `docker-compose.yml`; leídas en `game.go` `New`.
+- **Modo B (B30, opt-in):** `game/dm_decision.go` (`DMDecision` con whitelist `none|ambush|environmental|narrative`, `templateId` validado contra el catálogo vivo, `count` 1..3, prosa ≤240 runes), cooldown por sala (default 60 s), timeout (8 s), presupuesto global (10/min) y métricas atómicas. `NotifyDM` es el único punto de entrada para `roomEnter`/`combatStart` (sin doble narración/decisión). Config: `LLM_DM_DECISION_ENABLED` (default **0**), `LLM_DM_DECISION_COOLDOWN_SECONDS`, `LLM_DM_DECISION_TIMEOUT_SECONDS`, `LLM_DM_DECISION_MAX_PER_MIN`.
 - **Bugs corregidos en el corte:** `Round` (antes 0 → ahora `instance.Round`), `PartySize` (antes solo `len(Players)` → ahora `dmPartySize` con fiesta + followers reales) y `RoomName` (lookup `dmRoomName` + repetición en el proveedor).
-- **Pendientes:** modo B (`DMDecision` con whitelist de acciones + `hold` por defecto), eventos ambush/environmental, métricas de líneas emitidas/descartadas, tono por zona. QA: **§B24 verificado (APROBADO, 2026-10-22)**.
+- **Pendientes:** tono por zona y exposición de métricas fuera del proceso. QA: **§B24 verificado (APROBADO, 2026-10-22)**; modo B cubierto por tests unitarios en B30.
 
 Lo que ya existía y se reutiliza tal cual (la regla del diseño es "construir sobre `llm.Client`, nunca reemplazarlo"):
 
@@ -3296,7 +3307,7 @@ Pendientes del diseño:
 | Piece | Role |
 |-------|------|
 | Anillo de ventana corta (`llm_npc_session.go`) | Sigue pendiente. Los mecanismos B/C sí están implementados: `talk` puede saludar con LLM tras diálogo/quests, y el texto libre puede continuar una conversación `__llm__` reciente. |
-| `pkg/service/llmgen/dmdecision.go` | FASE 6.5 **modo B**: `DMDecision` (acción enum whitelist + target validado + flavor) y eventos ambush/environmental — diseño futuro |
+| `pkg/mudserver/game/dm_decision.go` + `pkg/server/llm.go` (`installDMDecision`) | FASE 6.5 **modo B implementado (B30)**: `DMDecision` (whitelist none/ambush/environmental/narrative + template validado + count clamp 1..3), cooldown/timeout/presupuesto y métricas; opt-in con `LLM_DM_DECISION_ENABLED` |
 
 Cuts: **A** MVP (templates + pipeline + character generation) — **landed**; **B** NPC runtime LLM — **landed as cortes 1–3 plus mechanisms B/C in Batches 25–29** (`ask` + `npc_memories` + structured personality + async summaries + YAML/REST/UI config + actionable options + dynamic relations; `talk` priority authored dialog → quests → LLM greeting; raw-text continuation of recent `__llm__` conversations; validated `kind=quest:<id>` limited to available quest actions); **C** maturity (quest generator, DM AI, admin tools) — **landed in part** (`questgen`/`questgen_context`, DM mode A, `handler/llm.go`; DM mode B remains pending). NPC prompt validation/rate limits/content filter and literal-secret rejection are basic guardrails; complete combat guardrails and the short-term memory ring remain pending. `FallbackDialogID` only maps to authored dialog and is not an error fallback.
 
@@ -3384,9 +3395,9 @@ de trabajo sin commitear.
 **Batch 24 — Backend (FASE 6.5, modo A — Dungeon Master AI) + Docs (22-oct-2026):**
 
 - **Qué es:** el narrador DM en prosa queda completo en **modo A** (solo comenta, **nunca muta estado**); se completó la implementación parcial previa y se corrigieron bugs (`Round`, `PartySize`, `RoomName`). Detalle completo en la sección "Dungeon Master AI (FASE 6.5, modo A)" de la Fase 6, más arriba.
-- **Archivos clave:** `pkg/mudserver/game/dm_narrator.go` (+ tests), `pkg/mudserver/game/def/gamectrl.go` (`DMEvent`/`NotifyDM`), hooks en `game_aggro.go`, `game_combat.go`, `commands/dm_notify.go`, `commands/room_takeexit.go`, `commands/level_up_notify.go`, `commands/questcommand.go`, `commands/dialog_select.go`; proveedor en `pkg/server/llm.go`; filtro/fallback en `pkg/service/llmgen/{filter,fallback}.go`; plantilla `pkg/service/llmprompt/prompts/dm.narration.yaml`; config `LLM_DM_*` en `.env.example` y `docker-compose.yml`.
-- **Guardrails vigentes:** cooldown 45 s por sala (y por usuario en eventos privados), timeout 8 s con 1 intento, presupuesto global 10/min, semáforo de 2 concurrencias, kill switch `LLM_DM_ENABLED`, filtro de salida (≤240 runes, sin ids sospechosos), audiencia Room/User con `Username: "DM"` (nunca global) y **fallback = silencio**.
-- **Pendientes:** modo B (`DMDecision`), eventos ambush/environmental, métricas; QA **§B24 verificado (APROBADO)**.
+- **Archivos clave:** `pkg/mudserver/game/dm_narrator.go` + `dm_decision.go` (+ tests), `pkg/mudserver/game/def/gamectrl.go` (`DMEvent`/`NotifyDM`), hooks en `game_aggro.go`, `game_combat.go`, `commands/dm_notify.go`, `commands/room_takeexit.go`, `commands/level_up_notify.go`, `commands/questcommand.go`, `commands/dialog_select.go`; proveedor en `pkg/server/llm.go` (`installDMNarrator`, `installDMDecision`); filtro/fallback en `pkg/service/llmgen/{filter,fallback}.go`; plantilla `pkg/service/llmprompt/prompts/dm.narration.yaml`; config `LLM_DM_*` en `.env.example` y `docker-compose.yml`.
+- **Guardrails vigentes:** cooldown 45 s por sala (y por usuario en eventos privados), timeout 8 s con 1 intento, presupuesto global 10/min, semáforo de 2 concurrencias, kill switch `LLM_DM_ENABLED`, filtro de salida (≤240 runes, sin ids sospechosos), audiencia Room/User con `Username: "DM"` (nunca global) y **fallback = silencio**. Modo B añade cooldown por sala, timeout, presupuesto propio, whitelist de acciones, template validado y count 1..3.
+- **Estado:** modo A cerrado en Batch 24; modo B implementado en B30 como opt-in (`LLM_DM_DECISION_ENABLED` apagado por defecto). QA **§B24 verificado (APROBADO)**.
 - **Docs (rol Docs):** nota "Implementado (Batch 24, modo A)" en `docs/design/PHASE6_LLM.md` §6.5; `PROJECT.md` (roadmap Fase 6 + bloque "Batches 17–24"), `ARCHITECTURE.md` (subsystem DM: flujo evento → `NotifyDM` → throttles → goroutine → mensaje), `FEATURES.md` (esta sección + Last Updated), `README.md` y `docs/index.md`.
 
 **Batch 25 — Backend (FASE 6.3, corte 1 — NPC runtime LLM, comando `ask`) + Docs (22-oct-2026):**
