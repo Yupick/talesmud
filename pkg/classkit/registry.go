@@ -12,6 +12,7 @@ var (
 	byID      map[string]*Def
 	byResolve map[string]*Def
 	fromPack  bool
+	activeDir string
 	onChange  func()
 )
 

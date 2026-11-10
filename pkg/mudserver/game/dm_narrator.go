@@ -195,6 +195,23 @@ func (g *Game) NotifyDM(e def.DMEvent) {
 		req.RoomName = g.dmRoomName(req.RoomID)
 	}
 	g.TriggerDMNarration(req)
+
+	// Mode B runs independently of the prose narrator: a decision is only
+	// attempted for the two room-scoped beats the design allows, and only when
+	// its own kill switch is on. MaybeDecideDM is non-blocking from here.
+	switch e.Kind {
+	case "roomEnter", "combatStart":
+		g.maybeTriggerDMDecision(DMDecisionRequest{
+			Event:       req.Event,
+			RoomID:      req.RoomID,
+			RoomName:    req.RoomName,
+			CharacterID: req.CharacterID,
+			UserID:      req.UserID,
+			PartySize:   req.PartySize,
+			Round:       req.Round,
+			Facts:       e.Facts,
+		})
+	}
 }
 
 // dmAudienceForEvent maps event kinds to the audience fixed by design §6.5:

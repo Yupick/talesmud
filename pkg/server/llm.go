@@ -152,6 +152,119 @@ func (rt llmRuntime) installDMNarrator(g *game.Game, facade service.Facade) {
 	})
 }
 
+// installDMDecision wires the mode-B decision provider onto the live game. It is
+// a no-op without a configured LLM or when the LLM_DM_DECISION_ENABLED kill
+// switch is off, so beta deployments keep the DM silent by default.
+func (rt llmRuntime) installDMDecision(g *game.Game, facade service.Facade) {
+	if g == nil || rt.pipeline == nil || !rt.pipeline.Enabled() || !dmDecisionEnabled() {
+		return
+	}
+	client := rt.pipeline.Client()
+	if client == nil {
+		return
+	}
+	g.SetDMDecisionProvider(func(ctx context.Context, req game.DMDecisionRequest) (game.DMDecision, error) {
+		roomName := strings.TrimSpace(req.RoomName)
+		if roomName == "" && req.RoomID != "" && facade != nil {
+			if room, err := facade.RoomsService().FindByID(req.RoomID); err == nil && room != nil {
+				roomName = room.Name
+			}
+		}
+		catalog := dmDecisionTemplateCatalog(facade)
+		facts := dmDecisionFactsLine(req.Facts)
+		system := `Eres el Dungeon Master de un MUD de fantasía en español.
+Decide si añadir UN giro de ambiente al evento. Responde SOLO con un objeto JSON, sin markdown:
+{"kind":"none|ambush|environmental|narrative","templateId":"","count":0,"message":"","reason":""}
+Reglas:
+- Usa "none" si no conviene ningún giro.
+- "ambush" solo con un templateId EXACTO de la lista y count entre 1 y 3.
+- "environmental" o "narrative" solo requieren message breve (máximo 240 caracteres).
+- No inventes ids, no reveles secretos y no describas cambios de estado no confirmados.
+- Si eliges prosa, no incluyas números de mecánica ni ids.`
+		user := fmt.Sprintf(
+			"Evento: %s\nSala: %s\nGrupo: %d\nRonda: %d\nHechos: %s\nPlantillas disponibles:\n%s",
+			oneLine(req.Event), oneLine(roomName), req.PartySize, req.Round, facts, catalog,
+		)
+		raw, err := llm.Complete(ctx, client, system, user, llm.Options{Temperature: 0.4, MaxTokens: 220})
+		if err != nil {
+			return game.DMDecision{}, err
+		}
+		payload, err := llmgen.ExtractJSON(raw)
+		if err != nil {
+			return game.DMDecision{}, fmt.Errorf("dm decision: extract json: %w", err)
+		}
+		var decision game.DMDecision
+		if err := json.Unmarshal(payload, &decision); err != nil {
+			return game.DMDecision{}, fmt.Errorf("dm decision: decode payload: %w", err)
+		}
+		return decision, nil
+	})
+}
+
+// dmDecisionTemplateCatalog renders a short id/name list for the decision
+// prompt. The game layer still validates the returned id by attempting the
+// spawn, so a truncated catalog is safe.
+func dmDecisionTemplateCatalog(facade service.Facade) string {
+	if facade == nil {
+		return "(sin catálogo)"
+	}
+	templates, err := facade.NPCsService().FindAllTemplates()
+	if err != nil || len(templates) == 0 {
+		return "(sin plantillas)"
+	}
+	var b strings.Builder
+	count := 0
+	for _, t := range templates {
+		if t == nil || strings.TrimSpace(t.ID) == "" {
+			continue
+		}
+		fmt.Fprintf(&b, "- %s (%s)\n", t.ID, oneLine(t.Name))
+		count++
+		if count >= 12 {
+			break
+		}
+	}
+	if b.Len() == 0 {
+		return "(sin plantillas)"
+	}
+	return b.String()
+}
+
+// dmDecisionFactsLine flattens code-derived facts into one prompt line.
+func dmDecisionFactsLine(facts map[string]string) string {
+	if len(facts) == 0 {
+		return "-"
+	}
+	parts := make([]string, 0, len(facts))
+	for k, v := range facts {
+		k, v = oneLine(k), oneLine(v)
+		if k == "" || v == "" {
+			continue
+		}
+		parts = append(parts, k+"="+v)
+	}
+	if len(parts) == 0 {
+		return "-"
+	}
+	return strings.Join(parts, "; ")
+}
+
+// oneLine collapses whitespace so prompt fields cannot inject new sections.
+func oneLine(s string) string {
+	return strings.Join(strings.Fields(s), " ")
+}
+
+// dmDecisionEnabled reports the LLM_DM_DECISION_ENABLED kill switch (default
+// off for beta).
+func dmDecisionEnabled() bool {
+	switch strings.ToLower(strings.TrimSpace(os.Getenv("LLM_DM_DECISION_ENABLED"))) {
+	case "1", "true", "yes", "on":
+		return true
+	default:
+		return false
+	}
+}
+
 // installContextualQuestProvider wires dynamic quest offers onto the live game.
 // It works with or without an LLM provider: when no provider is configured the
 // quest generator degrades to its deterministic fallback. It is a no-op when

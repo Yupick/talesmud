@@ -37,6 +37,11 @@ services:
       - LLM_DM_COOLDOWN_SECONDS=${LLM_DM_COOLDOWN_SECONDS:-45}
       - LLM_DM_TIMEOUT_SECONDS=${LLM_DM_TIMEOUT_SECONDS:-8}
       - LLM_DM_MAX_PER_MIN=${LLM_DM_MAX_PER_MIN:-10}
+      # Mode B decisions are opt-in; keep them off for the beta launch.
+      - LLM_DM_DECISION_ENABLED=${LLM_DM_DECISION_ENABLED:-0}
+      - LLM_DM_DECISION_COOLDOWN_SECONDS=${LLM_DM_DECISION_COOLDOWN_SECONDS:-60}
+      - LLM_DM_DECISION_TIMEOUT_SECONDS=${LLM_DM_DECISION_TIMEOUT_SECONDS:-8}
+      - LLM_DM_DECISION_MAX_PER_MIN=${LLM_DM_DECISION_MAX_PER_MIN:-10}
     volumes:
       - talesmud-data:/app/data
       - talesmud-uploads:/app/uploads

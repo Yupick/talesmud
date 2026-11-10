@@ -105,6 +105,23 @@ type Game struct {
 	dmMinuteEvents []time.Time
 	dmEnabled      bool
 
+	// Mode B (Phase 6.5): validated DM decisions may spawn an ambush or add
+	// ambient prose. The provider and cooldown share dmDecisionMu; the global
+	// budget has its own lock so it never nests with the provider lock.
+	dmDecisionMu           sync.Mutex
+	dmDecisionProvider     DMDecisionProvider
+	dmDecisionCooldown     map[string]time.Time
+	dmDecisionWindow       time.Duration
+	dmDecisionTimeout      time.Duration
+	dmDecisionMaxPerMinute int
+	dmDecisionMinuteMu     sync.Mutex
+	dmDecisionMinuteEvents []time.Time
+	dmDecisionEnabled      bool
+	// dmDecisionSpawn lets tests count ambush spawns without a real NPC
+	// manager. When nil, production uses NPCManager.SpawnInstanceDirect.
+	dmDecisionSpawn func(templateID, roomID string) error
+	dmDecisionStats dmDecisionStats
+
 	// questOfferMu guards the contextual quest offer state. The generator runs
 	// off the command loop and posts results back through Call. A nil provider
 	// disables the feature.
@@ -183,6 +200,26 @@ func New(facade service.Facade) *Game {
 			g.dmEnabled = true
 		}
 	}
+	g.dmDecisionCooldown = map[string]time.Time{}
+	g.dmDecisionWindow = dmDecisionCooldownDefault
+	g.dmDecisionTimeout = dmDecisionTimeoutDefault
+	g.dmDecisionMaxPerMinute = dmDecisionMaxPerMinute
+	if v := strings.TrimSpace(os.Getenv("LLM_DM_DECISION_COOLDOWN_SECONDS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 0 {
+			g.dmDecisionWindow = time.Duration(n) * time.Second
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("LLM_DM_DECISION_TIMEOUT_SECONDS")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil && n >= 1 {
+			g.dmDecisionTimeout = time.Duration(n) * time.Second
+		}
+	}
+	if v := strings.TrimSpace(os.Getenv("LLM_DM_DECISION_MAX_PER_MIN")); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			g.dmDecisionMaxPerMinute = n
+		}
+	}
+	g.dmDecisionEnabled = dmDecisionKillSwitch()
 	g.questOfferCooldown = map[string]time.Time{}
 	g.questOfferPending = map[string]*quests.Quest{}
 	g.questOfferSem = make(chan struct{}, questOfferMaxConcurrent)

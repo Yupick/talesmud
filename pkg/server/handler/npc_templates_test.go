@@ -3,6 +3,7 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -445,5 +446,174 @@ func TestNPCTemplateCreateDoesNotTrustClientID(t *testing.T) {
 	created := decodeNPCTemplateDTO(t, rec)
 	if id, _ := created["id"].(string); id == "forged-id" || strings.Contains(rec.Body.String(), "forged-id") {
 		t.Fatalf("client-supplied id leaked into create: %s", rec.Body.String())
+	}
+}
+
+// fakeNPCTemplateSpawner records the templates handed to the live-world bridge
+// and returns canned results/errors.
+type fakeNPCTemplateSpawner struct {
+	calls      []*npc.NPCTemplate
+	instanceID string
+	name       string
+	roomID     string
+	err        error
+}
+
+func (f *fakeNPCTemplateSpawner) spawn(tpl *npc.NPCTemplate) (string, string, string, error) {
+	f.calls = append(f.calls, tpl)
+	if f.err != nil {
+		return "", "", "", f.err
+	}
+	name := f.name
+	if name == "" && tpl != nil {
+		name = tpl.Name
+	}
+	return f.instanceID, name, f.roomID, nil
+}
+
+func TestNPCTemplateCreateAndUpdateTriggerSpawner(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h, _ := newNPCTemplatesTestHandler(t)
+	fake := &fakeNPCTemplateSpawner{instanceID: "instance-1", roomID: "room_crypt_1"}
+	h.Spawner = fake.spawn
+
+	rec := performHandlerRequest(http.MethodPost, "/api/npc-templates", npcTemplateCreateBody(), nil, nil, h.Create)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: expected 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("create must call the spawner once, got %d", len(fake.calls))
+	}
+	created := decodeNPCTemplateDTO(t, rec)
+	spawn, ok := created["spawn"].(map[string]interface{})
+	if !ok {
+		t.Fatalf("create response must carry spawn result: %s", rec.Body.String())
+	}
+	if spawn["instanceId"] != "instance-1" || spawn["roomId"] != "room_crypt_1" || spawn["name"] != "Skeleton Warrior" {
+		t.Fatalf("unexpected spawn result: %v", spawn)
+	}
+	id, _ := created["id"].(string)
+	if id == "" {
+		t.Fatalf("expected created id: %s", rec.Body.String())
+	}
+
+	fake.calls = nil
+	fake.instanceID = "instance-2"
+	updatedBody := npcTemplateCreateBody()
+	updatedBody["name"] = "Skeleton Lord"
+	rec = performHandlerRequest(http.MethodPut, "/api/npc-templates/"+id, updatedBody, nil,
+		gin.Params{{Key: "id", Value: id}}, h.Update)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("update: expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("update must call the spawner once, got %d", len(fake.calls))
+	}
+	if fake.calls[0].ID != id || fake.calls[0].SpawnRoomId != "room_crypt_1" {
+		t.Fatalf("update handed wrong template to spawner: %+v", fake.calls[0])
+	}
+	updated := decodeNPCTemplateDTO(t, rec)
+	if spawn, ok := updated["spawn"].(map[string]interface{}); !ok || spawn["instanceId"] != "instance-2" {
+		t.Fatalf("update response must carry spawn result: %s", rec.Body.String())
+	}
+}
+
+func TestNPCTemplateCreateWithoutSpawnConfigSkipsSpawner(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h, _ := newNPCTemplatesTestHandler(t)
+	fake := &fakeNPCTemplateSpawner{instanceID: "instance-1", roomID: "room_crypt_1"}
+	h.Spawner = fake.spawn
+
+	body := npcTemplateCreateBody()
+	body["spawnRoomId"] = ""
+	body["spawnCount"] = 0
+	rec := performHandlerRequest(http.MethodPost, "/api/npc-templates", body, nil, nil, h.Create)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create: expected 201, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(fake.calls) != 0 {
+		t.Fatalf("create without a spawn room must not call the spawner, got %d", len(fake.calls))
+	}
+	if _, ok := decodeNPCTemplateDTO(t, rec)["spawn"]; ok {
+		t.Fatalf("create without a spawn attempt must omit spawn: %s", rec.Body.String())
+	}
+}
+
+func TestNPCTemplateCreateSpawnerFailureIsBestEffort(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h, _ := newNPCTemplatesTestHandler(t)
+	fake := &fakeNPCTemplateSpawner{err: errors.New("npc manager is unavailable")}
+	h.Spawner = fake.spawn
+
+	rec := performHandlerRequest(http.MethodPost, "/api/npc-templates", npcTemplateCreateBody(), nil, nil, h.Create)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("create must survive a spawn failure: %d body=%s", rec.Code, rec.Body.String())
+	}
+	if len(fake.calls) != 1 {
+		t.Fatalf("spawner must have been attempted, got %d", len(fake.calls))
+	}
+	if _, ok := decodeNPCTemplateDTO(t, rec)["spawn"]; ok {
+		t.Fatalf("failed spawn must be omitted from the response: %s", rec.Body.String())
+	}
+}
+
+func TestNPCTemplateSpawnEndpoint(t *testing.T) {
+	gin.SetMode(gin.TestMode)
+	h, _ := newNPCTemplatesTestHandler(t)
+	fake := &fakeNPCTemplateSpawner{instanceID: "instance-1", name: "Skeleton Warrior-abc123", roomID: "room_crypt_1"}
+	h.Spawner = fake.spawn
+
+	rec := performHandlerRequest(http.MethodPost, "/api/npc-templates", npcTemplateCreateBody(), nil, nil, h.Create)
+	if rec.Code != http.StatusCreated {
+		t.Fatalf("seed create: %d %s", rec.Code, rec.Body.String())
+	}
+	id, _ := decodeNPCTemplateDTO(t, rec)["id"].(string)
+	fake.calls = nil
+
+	rec = performHandlerRequest(http.MethodPost, "/api/npc-templates/"+id+"/spawn", nil, nil,
+		gin.Params{{Key: "id", Value: id}}, h.Spawn)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("spawn: expected 200, got %d body=%s", rec.Code, rec.Body.String())
+	}
+	var result struct {
+		InstanceID string `json:"instanceId"`
+		Name       string `json:"name"`
+		RoomID     string `json:"roomId"`
+	}
+	if err := json.Unmarshal(rec.Body.Bytes(), &result); err != nil {
+		t.Fatalf("decode spawn: %v", err)
+	}
+	if result.InstanceID != "instance-1" || result.Name != "Skeleton Warrior-abc123" || result.RoomID != "room_crypt_1" {
+		t.Fatalf("unexpected spawn response: %s", rec.Body.String())
+	}
+	if len(fake.calls) != 1 || fake.calls[0].ID != id {
+		t.Fatalf("spawn must pass the persisted template, got %+v", fake.calls)
+	}
+
+	rec = performHandlerRequest(http.MethodPost, "/api/npc-templates/missing/spawn", nil, nil,
+		gin.Params{{Key: "id", Value: "missing"}}, h.Spawn)
+	if rec.Code != http.StatusNotFound {
+		t.Fatalf("spawn missing: expected 404, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	unavailable := &NPCTemplatesHandler{Service: h.Service}
+	rec = performHandlerRequest(http.MethodPost, "/api/npc-templates/"+id+"/spawn", nil, nil,
+		gin.Params{{Key: "id", Value: id}}, unavailable.Spawn)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("spawn without bridge: expected 503, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	fake.err = errors.New("spawnRoomId is required")
+	rec = performHandlerRequest(http.MethodPost, "/api/npc-templates/"+id+"/spawn", nil, nil,
+		gin.Params{{Key: "id", Value: id}}, h.Spawn)
+	if rec.Code != http.StatusBadRequest {
+		t.Fatalf("spawn config error: expected 400, got %d body=%s", rec.Code, rec.Body.String())
+	}
+
+	fake.err = errors.New("npc manager is unavailable")
+	rec = performHandlerRequest(http.MethodPost, "/api/npc-templates/"+id+"/spawn", nil, nil,
+		gin.Params{{Key: "id", Value: id}}, h.Spawn)
+	if rec.Code != http.StatusInternalServerError {
+		t.Fatalf("spawn infrastructure error: expected 500, got %d body=%s", rec.Code, rec.Body.String())
 	}
 }

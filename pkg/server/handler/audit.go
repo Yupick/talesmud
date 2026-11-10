@@ -3,12 +3,15 @@ package handler
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
+	"github.com/talesmud/talesmud/pkg/classkit"
 	"github.com/talesmud/talesmud/pkg/entities"
 	"github.com/talesmud/talesmud/pkg/entities/audit"
 	"github.com/talesmud/talesmud/pkg/mudserver/game"
@@ -50,6 +53,13 @@ var auditRoutes = map[string]auditRoute{
 	"POST /api/skills":                    {entityType: "skills", action: "create"},
 	"PUT /api/skills/:id":                 {entityType: "skills", action: "update"},
 	"DELETE /api/skills/:id":              {entityType: "skills", action: "delete"},
+	"POST /api/spells":                    {entityType: "skills", action: "create"},
+	"PUT /api/spells/:id":                 {entityType: "skills", action: "update"},
+	"DELETE /api/spells/:id":              {entityType: "skills", action: "delete"},
+	"POST /api/classes":                   {entityType: "classes", action: "create"},
+	"PUT /api/classes/:id":                {entityType: "classes", action: "update"},
+	"DELETE /api/classes/:id":             {entityType: "classes", action: "delete"},
+	"POST /api/classes/:id/duplicate":     {entityType: "classes", action: "create"},
 	"POST /api/character-templates":       {entityType: "character-templates", action: "create"},
 	"PUT /api/character-templates/:id":    {entityType: "character-templates", action: "update"},
 	"DELETE /api/character-templates/:id": {entityType: "character-templates", action: "delete"},
@@ -78,7 +88,7 @@ func AuditWrites(svc service.AuditService) gin.HandlerFunc {
 		}
 		var before json.RawMessage
 		if c.Request.Method != http.MethodPost {
-			raw, err := svc.LoadRaw(spec.entityType, entityID)
+			raw, err := loadAuditRaw(svc, spec.entityType, entityID)
 			if err != nil {
 				log.WithError(err).WithField("entityType", spec.entityType).Error("audit snapshot failed")
 				c.Next()
@@ -101,7 +111,7 @@ func AuditWrites(svc service.AuditService) gin.HandlerFunc {
 		}
 		var after json.RawMessage
 		if c.Request.Method != http.MethodDelete {
-			raw, err := svc.LoadRaw(spec.entityType, entityID)
+			raw, err := loadAuditRaw(svc, spec.entityType, entityID)
 			if err != nil {
 				log.WithError(err).Error("audit after-snapshot failed")
 				return
@@ -177,6 +187,10 @@ func UndoAudit(g *game.Game, svc service.AuditService) gin.HandlerFunc {
 			undoOps(c, g, svc, entry, actor)
 			return
 		}
+		if entry.EntityType == "classes" {
+			undoClass(c, svc, entry, actor)
+			return
+		}
 		undo, err := svc.UndoCRUD(c.Param("id"), actor)
 		if err != nil {
 			writeCoded(c, err)
@@ -188,6 +202,102 @@ func UndoAudit(g *game.Game, svc service.AuditService) gin.HandlerFunc {
 			"undoable": undo.Undoable,
 		})
 	}
+}
+
+// undoClass reverses a class-definition audit entry by restoring or deleting
+// the YAML file. It mirrors service.UndoCRUD's conflict checks but uses the
+// classkit catalog instead of a SQLite table.
+func undoClass(c *gin.Context, svc service.AuditService, entry *audit.Entry, actor service.AuditActor) {
+	if entry.UndoneBy != "" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "this change was already undone"})
+		return
+	}
+	if !entry.Undoable {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "this change cannot be undone"})
+		return
+	}
+	current := classAuditRaw(entry.EntityID)
+	if !jsonRawEqual(current, entry.After) {
+		c.JSON(http.StatusConflict, gin.H{"error": "the entity changed since this change; undo was refused"})
+		return
+	}
+	if isEmptyJSON(entry.Before) {
+		if err := classkit.DeleteDef(classkit.ActiveDir(), entry.EntityID); err != nil && !errors.Is(err, classkit.ErrNotFound) {
+			writeClassError(c, err)
+			return
+		}
+	} else {
+		var dto classDTO
+		if err := json.Unmarshal(entry.Before, &dto); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "stored class snapshot is invalid"})
+			return
+		}
+		d := dto.toDef()
+		d.ID = entry.EntityID
+		if bodyID := strings.TrimSpace(dto.ID); bodyID != "" && !strings.EqualFold(bodyID, d.ID) && strings.EqualFold(d.SkillClass, bodyID) {
+			d.SkillClass = ""
+		}
+		if err := classkit.SaveDef(classkit.ActiveDir(), d); err != nil {
+			writeClassError(c, err)
+			return
+		}
+	}
+	restored := classAuditRaw(entry.EntityID)
+	undo, err := svc.Record(service.AuditRecord{
+		Actor:      actor,
+		Action:     "undo",
+		EntityType: entry.EntityType,
+		EntityID:   entry.EntityID,
+		Before:     current,
+		After:      restored,
+		Source:     audit.SourceCreator,
+		Undoable:   true,
+		Summary:    "undo " + entry.Action + " " + entry.EntityType + " " + entry.EntityID,
+	})
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "the undo succeeded but the audit log failed"})
+		return
+	}
+	if err := svc.MarkUndone(entry.ID, undo.ID); err != nil {
+		log.WithError(err).Error("audit mark undone failed")
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"summary":  undo.Summary,
+		"auditId":  undo.ID,
+		"undoable": undo.Undoable,
+	})
+}
+
+func classAuditRaw(entityID string) json.RawMessage {
+	d := classkit.FindDef(entityID)
+	if d == nil {
+		return nil
+	}
+	raw, err := json.Marshal(defToDTO(d))
+	if err != nil {
+		return nil
+	}
+	return raw
+}
+
+func isEmptyJSON(raw json.RawMessage) bool {
+	trimmed := bytes.TrimSpace(raw)
+	return len(trimmed) == 0 || bytes.Equal(trimmed, []byte("null"))
+}
+
+func jsonRawEqual(a, b json.RawMessage) bool {
+	return bytes.Equal(compactJSON(a), compactJSON(b))
+}
+
+func compactJSON(raw json.RawMessage) []byte {
+	if isEmptyJSON(raw) {
+		return nil
+	}
+	var buf bytes.Buffer
+	if err := json.Compact(&buf, raw); err != nil {
+		return raw
+	}
+	return buf.Bytes()
 }
 
 func undoOps(c *gin.Context, g *game.Game, svc service.AuditService, entry *audit.Entry, actor service.AuditActor) {
@@ -262,6 +372,16 @@ func actorFrom(c *gin.Context) service.AuditActor {
 		name = user.ID
 	}
 	return service.AuditActor{UserID: user.ID, Name: name}
+}
+
+// loadAuditRaw snapshots an entity for the change log. Class definitions are
+// YAML files rather than SQLite rows, so they are serialized from the catalog
+// using the same DTO as the class CRUD handler.
+func loadAuditRaw(svc service.AuditService, entityType, entityID string) (json.RawMessage, error) {
+	if entityType == "classes" {
+		return classAuditRaw(entityID), nil
+	}
+	return svc.LoadRaw(entityType, entityID)
 }
 
 func idFromJSON(body []byte) string {

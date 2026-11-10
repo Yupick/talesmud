@@ -82,6 +82,7 @@ func LoadDir(dir string) (int, error) {
 		}
 		return list[i].ID < list[j].ID
 	})
+	setActiveDir(dir)
 	install(list, true)
 	return len(list), nil
 }

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
 	"github.com/talesmud/talesmud/pkg/entities"
 	npc "github.com/talesmud/talesmud/pkg/entities/npcs"
 	"github.com/talesmud/talesmud/pkg/service"
@@ -23,6 +24,12 @@ import (
 // npc_templates blueprints.
 type NPCTemplatesHandler struct {
 	Service service.NPCTemplatesService
+
+	// Spawner, when set, bridges a persisted blueprint into the live world
+	// (runtime NPC template + spawner + immediate instance). It is wired to
+	// game.Game.SpawnNPCTemplate in server.go. Nil disables best-effort spawns
+	// on create/update and makes POST /api/npc-templates/:id/spawn return 503.
+	Spawner func(tpl *npc.NPCTemplate) (instanceID, name, roomID string, err error)
 }
 
 // npcTemplateSummaryDTO is the list payload. The heavy loot/behavior/scaling
@@ -61,6 +68,16 @@ type npcTemplateDetailDTO struct {
 	LLM            *npc.LLMConfig  `json:"llm,omitempty"`
 	IsTemplate     bool            `json:"isTemplate"`
 	CreatedAt      time.Time       `json:"createdAt"`
+
+	// Spawn is present only when create/update fired the best-effort bridge.
+	Spawn *npcTemplateSpawnResultDTO `json:"spawn,omitempty"`
+}
+
+// npcTemplateSpawnResultDTO is the result of a successful blueprint spawn.
+type npcTemplateSpawnResultDTO struct {
+	InstanceID string `json:"instanceId"`
+	Name       string `json:"name"`
+	RoomID     string `json:"roomId"`
 }
 
 func npcTemplateSummary(tpl *npc.NPCTemplate) npcTemplateSummaryDTO {
@@ -245,8 +262,35 @@ func npcTemplateErrIsMissing(err error) bool {
 	return strings.Contains(msg, "not found") || strings.Contains(msg, "required")
 }
 
+// spawnBestEffort fires the live-world bridge after a successful save. Spawn
+// failures are logged and swallowed so authoring is never blocked by a runtime
+// problem (for example, no room configured or the game loop not ready yet).
+func (h *NPCTemplatesHandler) spawnBestEffort(tpl *npc.NPCTemplate) *npcTemplateSpawnResultDTO {
+	if h == nil || h.Spawner == nil || tpl == nil {
+		return nil
+	}
+	if strings.TrimSpace(tpl.SpawnRoomId) == "" || tpl.SpawnCount <= 0 {
+		return nil
+	}
+
+	instanceID, name, roomID, err := h.Spawner(tpl)
+	if err != nil {
+		log.WithError(err).WithFields(log.Fields{
+			"template": tpl.ID,
+			"room":     tpl.SpawnRoomId,
+		}).Warn("Best-effort NPC template spawn failed")
+		return nil
+	}
+	return &npcTemplateSpawnResultDTO{
+		InstanceID: instanceID,
+		Name:       name,
+		RoomID:     roomID,
+	}
+}
+
 // Create handles POST /api/npc-templates (creator-gated) and answers 201 with
-// the created detail DTO.
+// the created detail DTO. When the template has a spawn room it is also
+// instantiated in the live world on a best-effort basis.
 func (h *NPCTemplatesHandler) Create(c *gin.Context) {
 	var req npcTemplateUpsertRequest
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -259,7 +303,53 @@ func (h *NPCTemplatesHandler) Create(c *gin.Context) {
 		writeNPCTemplateServiceError(c, err)
 		return
 	}
-	c.JSON(http.StatusCreated, npcTemplateDetail(created, true))
+	dto := npcTemplateDetail(created, true)
+	dto.Spawn = h.spawnBestEffort(created)
+	c.JSON(http.StatusCreated, dto)
+}
+
+// Spawn handles POST /api/npc-templates/:id/spawn (creator-gated). It forces a
+// runtime instance of an already persisted blueprint, creating/refreshing the
+// runtime NPC template and spawner as needed.
+func (h *NPCTemplatesHandler) Spawn(c *gin.Context) {
+	tpl, err := h.Service.FindByID(c.Param("id"))
+	if err != nil || tpl == nil {
+		if err != nil && !npcTemplateErrIsMissing(err) {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			return
+		}
+		c.JSON(http.StatusNotFound, gin.H{"error": "npc template not found"})
+		return
+	}
+	if h.Spawner == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"error": "npc template spawn is unavailable"})
+		return
+	}
+
+	instanceID, name, roomID, err := h.Spawner(tpl)
+	if err != nil {
+		writeNPCTemplateSpawnError(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, npcTemplateSpawnResultDTO{
+		InstanceID: instanceID,
+		Name:       name,
+		RoomID:     roomID,
+	})
+}
+
+// writeNPCTemplateSpawnError maps bridge failures: bad blueprint/spawn config
+// is 400 while infrastructure failures are 500.
+func writeNPCTemplateSpawnError(c *gin.Context, err error) {
+	msg := strings.ToLower(err.Error())
+	switch {
+	case strings.Contains(msg, "required"),
+		strings.Contains(msg, "spawn room"),
+		strings.Contains(msg, "room") && strings.Contains(msg, "not found"):
+		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
+	default:
+		c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+	}
 }
 
 // Update handles PUT /api/npc-templates/:id (creator-gated) and answers 200
@@ -278,7 +368,9 @@ func (h *NPCTemplatesHandler) Update(c *gin.Context) {
 	}
 	// repo.Update stamps UpdatedAt, keeps the id and service.Update preserved
 	// CreatedAt on tpl.
-	c.JSON(http.StatusOK, npcTemplateDetail(tpl, true))
+	dto := npcTemplateDetail(tpl, true)
+	dto.Spawn = h.spawnBestEffort(tpl)
+	c.JSON(http.StatusOK, dto)
 }
 
 // Delete handles DELETE /api/npc-templates/:id (creator-gated) and answers 204,

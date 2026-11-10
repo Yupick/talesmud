@@ -79,6 +79,20 @@ func adminAuthMiddleware() gin.HandlerFunc {
 	return gin.BasicAuth(gin.Accounts{user: pass})
 }
 
+// optionalAuth authenticates a public route when an Authorization bearer token
+// is present, but leaves anonymous requests untouched. GET /api/classes uses
+// it to return the full creator DTO on the same public path as the catalog.
+func optionalAuth(facade service.Facade, sessions *authsession.Service) gin.HandlerFunc {
+	auth := AuthMiddleware(facade, sessions)
+	return func(c *gin.Context) {
+		if bearerToken(c) == "" {
+			c.Next()
+			return
+		}
+		auth(c)
+	}
+}
+
 func adminCredentialsInsecure(user, pass string) bool {
 	if len(pass) < 12 {
 		return true
@@ -357,6 +371,8 @@ func (app *app) setupRoutes() {
 		Service: app.Facade.SkillsService(),
 	}
 
+	classesHandler := &handler.ClassesHandler{}
+
 	llmRT := buildLLMRuntime(app.Facade)
 
 	generate := &handler.GenerateHandler{
@@ -513,8 +529,12 @@ func (app *app) setupRoutes() {
 		}
 		healthHandler.Game = liveGame
 		llmRT.installDMNarrator(liveGame, app.Facade)
+		llmRT.installDMDecision(liveGame, app.Facade)
 		llmRT.installContextualQuestProvider(liveGame, app.Facade)
 		llmRT.installNPCDialogueProvider(liveGame, app.Facade)
+		if liveGame != nil {
+			npcTemplates.Spawner = liveGame.SpawnNPCTemplate
+		}
 		creator := protected.Group("")
 		creator.Use(CreatorMiddleware())
 		creator.Use(handler.AuditWrites(app.Facade.AuditService()))
@@ -546,6 +566,11 @@ func (app *app) setupRoutes() {
 			creator.GET("quests/:id", questsHandler.GetQuestByID)
 			creator.GET("skills", skillsHandler.GetSkills)
 			creator.GET("skills/:id", skillsHandler.GetSkillByID)
+
+			// Class definitions (FASE 5.2). GET /api/classes stays on the public
+			// route below; it serves the full editor DTO when a creator token is
+			// present. The detail route is creator-gated.
+			creator.GET("classes/:id", classesHandler.GetClassByID)
 
 			// Rooms
 			creator.GET("rooms/:id/inspect", rooms.InspectRoom)
@@ -618,10 +643,21 @@ func (app *app) setupRoutes() {
 			creator.PUT("quests/:id", questsHandler.UpdateQuestByID)
 			creator.DELETE("quests/:id", questsHandler.DeleteQuestByID)
 
-			// Skills
+			// Skills. "Spells" is an alias of the same definition store.
 			creator.POST("skills", skillsHandler.PostSkill)
 			creator.PUT("skills/:id", skillsHandler.UpdateSkillByID)
 			creator.DELETE("skills/:id", skillsHandler.DeleteSkillByID)
+			creator.GET("spells", skillsHandler.GetSkills)
+			creator.GET("spells/:id", skillsHandler.GetSkillByID)
+			creator.POST("spells", skillsHandler.PostSkill)
+			creator.PUT("spells/:id", skillsHandler.UpdateSkillByID)
+			creator.DELETE("spells/:id", skillsHandler.DeleteSkillByID)
+
+			// Class definitions (FASE 5.2)
+			creator.POST("classes", classesHandler.Create)
+			creator.PUT("classes/:id", classesHandler.Update)
+			creator.DELETE("classes/:id", classesHandler.Delete)
+			creator.POST("classes/:id/duplicate", classesHandler.Duplicate)
 
 			// Dungeon builder (FASE 5.1)
 			creator.POST("dungeons", dungeons.Create)
@@ -632,6 +668,7 @@ func (app *app) setupRoutes() {
 			creator.POST("npc-templates", npcTemplates.Create)
 			creator.PUT("npc-templates/:id", npcTemplates.Update)
 			creator.DELETE("npc-templates/:id", npcTemplates.Delete)
+			creator.POST("npc-templates/:id/spawn", npcTemplates.Spawn)
 
 			// Backgrounds
 			creator.POST("backgrounds/upload", backgrounds.UploadBackground)
@@ -717,7 +754,7 @@ func (app *app) setupRoutes() {
 
 		// Legacy endpoint for old character creation flow (returns hardcoded templates)
 		public.GET("templates/characters", csh.GetCharacterTemplates)
-		public.GET("classes", handler.GetClasses)
+		public.GET("classes", optionalAuth(app.Facade, app.sessions), classesHandler.Catalog)
 		public.GET("item-slots", items.GetItemSlots)
 		public.GET("item-qualities", items.GetItemQualities)
 		public.GET("item-types", items.GetItemTypes)

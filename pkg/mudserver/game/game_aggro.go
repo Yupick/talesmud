@@ -3,6 +3,7 @@ package game
 import (
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -11,6 +12,7 @@ import (
 	"github.com/talesmud/talesmud/pkg/entities/combat"
 	npc "github.com/talesmud/talesmud/pkg/entities/npcs"
 	"github.com/talesmud/talesmud/pkg/mudserver/game/balance"
+	"github.com/talesmud/talesmud/pkg/mudserver/game/def"
 	"github.com/talesmud/talesmud/pkg/mudserver/game/messages"
 	"github.com/talesmud/talesmud/pkg/ruleset"
 )
@@ -568,13 +570,20 @@ func (c *CombatController) BeginEngagement(roomID string, player *characters.Cha
 		Message:    roomLine,
 	}
 	c.nudgePartyAssist(player, roomID, target.Name, names)
-	c.game.TriggerDMNarration(DMNarrationRequest{
-		Event:     "combatStart",
-		RoomID:    roomID,
-		RoomName:  c.game.dmRoomName(roomID),
-		NPCName:   target.Name,
-		Round:     instance.Round,
-		PartySize: c.game.dmPartySize(player.ID, len(instance.Players)),
+	// Single entry point for both prose (mode A) and additive decisions
+	// (mode B). NotifyDM owns the per-event gating so combatStart is never
+	// narrated or decided twice.
+	c.game.NotifyDM(def.DMEvent{
+		Kind:        "combatStart",
+		RoomID:      roomID,
+		CharacterID: player.ID,
+		UserID:      userID,
+		Facts: map[string]string{
+			"npcName":   target.Name,
+			"outcome":   "ongoing",
+			"round":     strconv.Itoa(instance.Round),
+			"partySize": strconv.Itoa(c.game.dmPartySize(player.ID, len(instance.Players))),
+		},
 	})
 	return instance
 }
