@@ -705,7 +705,7 @@
   <PartyOverlay store={muxStore} {sendMessage} />
   <ClanPanel store={muxStore} authToken={$authToken} />
   <DMsPanel store={muxStore} authToken={$authToken} />
-  <ClassesEditor />
+  <ClassesEditor authToken={$authToken} />
   <NpcFactory authToken={$authToken} />
   <DungeonBuilder authToken={$authToken} />
   <AuditPanel authToken={$authToken} />

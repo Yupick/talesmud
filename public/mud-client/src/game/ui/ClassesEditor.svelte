@@ -2,13 +2,12 @@
   // Class / Skill balance editor (Phase 5.2).
   //
   // The panel is opened from the game chrome (`classesEditorOpen`, shortcut L)
-  // and edits the local class catalog. All validation and preview math comes
+  // and edits the active class catalog. All validation and preview math comes
   // from the pure modules `../balanceRules.js` and `../classEditor.js`.
   //
-  // Persistence: the backend only serves GET /api/classes and the generic
-  // /api/skills routes, so class definitions are stored in localStorage until
-  // `CLASS_DEF_CRUD_AVAILABLE` in `../../api/classes.js` flips to true. The
-  // banner lists the endpoints the Orchestrator still needs to wire.
+  // Persistence: the backend serves the class CRUD routes, so the panel loads
+  // and saves through `src/api/classes.js` with the creator token. It only
+  // falls back to localStorage when the network itself is unavailable.
   import { onMount } from "svelte";
   import { classesEditorOpen } from "../uiChrome.js";
   import {
@@ -27,6 +26,7 @@
     emptyClass,
     emptySkill,
     duplicateClass,
+    normalizeClass,
     uniqueId,
   } from "../classEditor.js";
   import {
@@ -40,7 +40,14 @@
   import {
     CLASS_DEF_CRUD_AVAILABLE,
     CLASS_ENDPOINT_STATUS,
+    listClassDefs,
+    createClassDef,
+    updateClassDef,
+    deleteClassDef,
+    duplicateClassDef,
   } from "../../api/classes.js";
+
+  export let authToken = "";
 
   let classes = [];
   let selectedId = null;
@@ -49,6 +56,7 @@
   let statusMsg = "";
   let statusKind = "info";
   let revision = 0; // bump on every inline edit so derived checks re-run
+  let remoteIds = new Set(); // class ids known to exist on the server
 
   // Preview controls.
   let previewLevel = 1;
@@ -64,8 +72,19 @@
     statusKind = kind;
   }
 
+  function applyCatalog(list, message) {
+    classes = (list || []).map(normalizeClass);
+    remoteIds = new Set(classes.map((c) => c.id));
+    if (!selectedId || !classes.some((c) => c.id === selectedId)) {
+      selectedId = classes.length ? classes[0].id : null;
+    }
+    selectedSkillIndex = -1;
+    setStatus(message, "info");
+  }
+
   function loadFromStorage() {
     classes = loadClasses();
+    remoteIds = new Set();
     if (!selectedId || !classes.some((c) => c.id === selectedId)) {
       selectedId = classes.length ? classes[0].id : null;
     }
@@ -73,9 +92,34 @@
     setStatus("Demo catalog loaded from localStorage.", "info");
   }
 
-  onMount(loadFromStorage);
+  function isNetworkError(err) {
+    return /network error/i.test(String((err && err.message) || err || ""));
+  }
 
-  $: if ($classesEditorOpen && classes.length === 0) loadFromStorage();
+  async function loadFromServer() {
+    const data = await listClassDefs(authToken);
+    const list = Array.isArray(data) ? data : data && Array.isArray(data.classes) ? data.classes : [];
+    applyCatalog(list, "Remote catalog loaded.");
+  }
+
+  async function loadCatalog() {
+    if (CLASS_DEF_CRUD_AVAILABLE && authToken) {
+      try {
+        await loadFromServer();
+        return;
+      } catch (err) {
+        if (!isNetworkError(err)) {
+          setStatus(`Could not load remote classes: ${(err && err.message) || err}`, "error");
+          return;
+        }
+      }
+    }
+    loadFromStorage();
+  }
+
+  onMount(loadCatalog);
+
+  $: if ($classesEditorOpen && classes.length === 0) loadCatalog();
 
   $: selected = classes.find((c) => c.id === selectedId) || null;
   $: selectedSkill =
@@ -144,22 +188,48 @@
     setStatus("New class added. Remember to Save.", "success");
   }
 
-  function onDuplicateClass() {
+  async function onDuplicateClass() {
     if (!selected) return;
+    if (CLASS_DEF_CRUD_AVAILABLE && authToken) {
+      try {
+        const created = await duplicateClassDef(authToken, selected.id);
+        await loadFromServer();
+        const copy = classes.find((c) => c.id === (created && created.id));
+        if (copy) selectClass(copy);
+        setStatus(`Duplicated as ${(created && created.id) || "copy"}.`, "success");
+        return;
+      } catch (err) {
+        if (!isNetworkError(err)) {
+          setStatus(`Could not duplicate: ${(err && err.message) || err}`, "error");
+          return;
+        }
+      }
+    }
     const copy = duplicateClass(selected, classes.map((c) => c.id));
     classes = [...classes, copy];
     selectClass(copy);
     setStatus(`Duplicated as ${copy.id}.`, "success");
   }
 
-  function onDeleteClass() {
+  async function onDeleteClass() {
     if (!selected) return;
     if (typeof confirm === "function" && !confirm(`Delete class "${selected.name}"?`)) return;
-    const id = selected.id;
-    classes = classes.filter((c) => c !== selected);
+    const target = selected;
+    if (CLASS_DEF_CRUD_AVAILABLE && authToken && remoteIds.has(target.id)) {
+      try {
+        await deleteClassDef(authToken, target.id);
+      } catch (err) {
+        if (!isNetworkError(err)) {
+          setStatus(`Could not delete: ${(err && err.message) || err}`, "error");
+          return;
+        }
+      }
+      remoteIds.delete(target.id);
+    }
+    classes = classes.filter((c) => c !== target);
     selectedId = classes.length ? classes[0].id : null;
     selectedSkillIndex = -1;
-    setStatus(`Deleted ${id}.`, "success");
+    setStatus(`Deleted ${target.id}.`, "success");
   }
 
   function onAddSkill() {
@@ -206,17 +276,41 @@
     touch();
   }
 
-  function onSave() {
-    const ok = saveClasses(classes);
-    if (ok) setStatus("Saved to localStorage.", "success");
-    else setStatus("Could not save locally (storage unavailable).", "error");
+  async function onSave() {
+    if (!(CLASS_DEF_CRUD_AVAILABLE && authToken)) {
+      const ok = saveClasses(classes);
+      if (ok) setStatus("Saved to localStorage.", "success");
+      else setStatus("Could not save locally (storage unavailable).", "error");
+      return;
+    }
+    try {
+      for (const cls of classes) {
+        const payload = normalizeClass(cls);
+        if (remoteIds.has(cls.id)) {
+          await updateClassDef(authToken, cls.id, payload);
+        } else {
+          await createClassDef(authToken, payload);
+        }
+      }
+      await loadFromServer();
+      setStatus("Saved to server.", "success");
+    } catch (err) {
+      if (isNetworkError(err)) {
+        const ok = saveClasses(classes);
+        if (ok) setStatus("Network error. Saved to localStorage instead.", "info");
+        else setStatus("Network error and local storage unavailable.", "error");
+      } else {
+        setStatus(`Could not save: ${(err && err.message) || err}`, "error");
+      }
+    }
   }
 
   function onReset() {
-    if (typeof confirm === "function" && !confirm("Discard local edits and reload the demo catalog?")) return;
+    if (typeof confirm === "function" && !confirm("Discard local edits and reload the class catalog?")) return;
     resetClasses();
     selectedId = null;
-    loadFromStorage();
+    if (CLASS_DEF_CRUD_AVAILABLE && authToken) loadCatalog();
+    else loadFromStorage();
   }
 
   function focusIssue(item) {

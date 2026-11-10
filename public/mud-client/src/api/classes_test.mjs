@@ -64,7 +64,7 @@ function assertAuth(call) {
   assertAuth(last());
 }
 
-// Pending class CRUD routes build the intended contract.
+// Creator class CRUD routes build the served contract.
 {
   mockFetch(() => jsonResponse(200, { id: 'mage' }));
   const created = await createClassDef(TOKEN, { id: 'mage', name: 'Mage' });
@@ -120,10 +120,13 @@ function assertAuth(call) {
   assert.equal(last().options.method, 'DELETE');
 }
 
-// The capability flags describe the pending backend honestly.
+// The capability flags describe the served backend.
 {
-  assert.equal(CLASS_DEF_CRUD_AVAILABLE, false);
-  assert.equal(CLASS_ENDPOINT_STATUS.createClass, false);
+  assert.equal(CLASS_DEF_CRUD_AVAILABLE, true);
+  assert.equal(CLASS_ENDPOINT_STATUS.createClass, true);
+  assert.equal(CLASS_ENDPOINT_STATUS.getClass, true);
+  assert.equal(CLASS_ENDPOINT_STATUS.updateClass, true);
+  assert.equal(CLASS_ENDPOINT_STATUS.deleteClass, true);
   assert.equal(CLASS_ENDPOINT_STATUS.listSkills, true);
 }
 

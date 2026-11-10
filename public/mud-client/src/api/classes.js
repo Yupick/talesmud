@@ -1,32 +1,29 @@
 // Class and skill definition REST helpers (Creator Phase 5.2).
 //
-// Backend status — read this before wiring the editor to the network:
+// Backend status — all class-definition routes are now served:
 //
-//   EXISTING
-//     GET    /api/classes          public catalog, `handler.GetClasses`
-//                                   (balance numbers are deliberately stripped)
-//     GET    /api/skills           creator-gated, `skillsHandler.GetSkills`
-//     GET    /api/skills/:id       creator-gated
-//     POST   /api/skills           creator-gated
-//     PUT    /api/skills/:id       creator-gated
-//     DELETE /api/skills/:id       creator-gated
-//
-//   PENDING (design contract, NOT served yet — see the Phase 5.2 report)
+//   PUBLIC
+//     GET    /api/classes          catalog for anonymous callers; a creator
+//                                   token on the same path returns the full
+//                                   editor definitions (balance + template).
+//   CREATOR
 //     GET    /api/classes/:id      full class including balance + skills
 //     POST   /api/classes          create a class pack file
 //     PUT    /api/classes/:id      update a class pack file
 //     DELETE /api/classes/:id      delete a class pack file
 //     POST   /api/classes/:id/duplicate
+//     GET    /api/skills           also aliased as /api/spells
+//     GET    /api/skills/:id       also aliased as /api/spells/:id
+//     POST   /api/skills           also aliased as /api/spells
+//     PUT    /api/skills/:id       also aliased as /api/spells/:id
+//     DELETE /api/skills/:id       also aliased as /api/spells/:id
 //
-// Because the class CRUD routes do not exist, `ClassesEditor.svelte` persists
-// edits to localStorage via `src/game/classEditor.js`. Flip
-// `CLASS_DEF_CRUD_AVAILABLE` to true once the backend routes land and the
-// editor will prefer the network. The request functions below already encode
-// the intended contract so the switch is a one-line change.
+// `ClassesEditor.svelte` prefers these routes and falls back to localStorage
+// only when the network itself is unavailable.
 import { backend } from "./base.js";
 
 /** True once the backend serves POST/PUT/DELETE /api/classes. */
-export const CLASS_DEF_CRUD_AVAILABLE = false;
+export const CLASS_DEF_CRUD_AVAILABLE = true;
 
 /**
  * Human-readable status of every endpoint this module talks to. Kept as data
@@ -34,10 +31,10 @@ export const CLASS_DEF_CRUD_AVAILABLE = false;
  */
 export const CLASS_ENDPOINT_STATUS = {
   listClasses: true,
-  getClass: false,
-  createClass: false,
-  updateClass: false,
-  deleteClass: false,
+  getClass: true,
+  createClass: true,
+  updateClass: true,
+  deleteClass: true,
   listSkills: true,
   createSkill: true,
   updateSkill: true,
@@ -87,7 +84,9 @@ function withQuery(path, params) {
 }
 
 /**
- * Public class catalog (GET /api/classes — exists).
+ * Public class catalog (GET /api/classes).
+ * With no token the server returns the anonymous catalog; with a creator token
+ * the same path returns the full editor definitions.
  * @returns {Promise<{source:string, classes:Array<object>, races:Array<object>}>}
  */
 function fetchClasses() {
@@ -99,8 +98,7 @@ function fetchClasses() {
 // ---------------------------------------------------------------------------
 
 /**
- * List full class definitions for the Creator (GET /api/classes — exists, but
- * the public payload omits balance/skills until the pending full route lands).
+ * List full class definitions for the Creator (GET /api/classes with token).
  * @param {string} token session JWT
  */
 function listClassDefs(token) {
@@ -109,7 +107,6 @@ function listClassDefs(token) {
 
 /**
  * Full class definition including balance and skills.
- * PENDING backend: GET /api/classes/:id
  * @param {string} token
  * @param {string} id
  */
@@ -118,7 +115,7 @@ function getClassDef(token, id) {
 }
 
 /**
- * Create a class. PENDING backend: POST /api/classes
+ * Create a class.
  * @param {string} token
  * @param {object} classDef
  */
@@ -127,7 +124,7 @@ function createClassDef(token, classDef) {
 }
 
 /**
- * Update a class. PENDING backend: PUT /api/classes/:id
+ * Update a class.
  * @param {string} token
  * @param {string} id
  * @param {object} classDef
@@ -137,7 +134,7 @@ function updateClassDef(token, id, classDef) {
 }
 
 /**
- * Delete a class. PENDING backend: DELETE /api/classes/:id
+ * Delete a class.
  * @param {string} token
  * @param {string} id
  */
@@ -146,8 +143,8 @@ function deleteClassDef(token, id) {
 }
 
 /**
- * Duplicate a class. PENDING backend: POST /api/classes/:id/duplicate
- * (the editor currently duplicates in local state instead).
+ * Duplicate a class. The body is optional; the server generates
+ * `<id>_copy` when it is empty.
  * @param {string} token
  * @param {string} id
  */
