@@ -4,6 +4,8 @@
 
 **Last Updated**: 2026-11-01 (Batch 29 — FASE 6.3 mecanismos B/C, opciones `quest:<id>` validadas, contrato de texto libre y prompt `npc.dialogue` v1.0.3; Batch 28 — conexión de `relationDelta` a mensajes; Batch 27 — opciones LLM accionables, relaciones dinámicas y feedback; Batch 26 — personalidad/memoria/config; Batch 25 — `ask` + `npc_memories`; Batch 24 — DM narrator modo A; batches anteriores 15–23)
 
+**Upstream sync**: 2026-11-11 — integrado `v0.5.6` (base documental `2026-10-11`); se conservan ambas líneas de desarrollo.
+
 El detalle histórico de Batches 25–27 que sigue documenta el estado de cada batch en su fecha. El estado vigente de FASE 6.3, incluido el cierre B/C, está en la sección “NPC runtime dialogue” y en `docs/design/PHASE6_LLM.md` §6.3.
 
 ---
@@ -26,10 +28,11 @@ El detalle histórico de Batches 25–27 que sigue documenta el estado de cada b
 14. [Recent Features & Best Practices](#recent-features--best-practices)
 15. [Discovered World Atlas](#discovered-world-atlas)
 16. [Game Client Tab Container Widget](#game-client-tab-container-widget)
-17. [Derived Attributes (Phase 2.3)](#derived-attributes-phase-23)
-18. [Progression (Phase 2.4): XP Curve, Talents, Prestige](#progression-phase-24-xp-curve-talents-prestige)
-19. [Client UX Enhancements (Phases 3.2, 3.4, 3.7)](#client-ux-enhancements-phases-32-34-37)
-20. [Phase 6 LLM Integration (Design And Foundation)](#phase-6-llm-integration-design-and-foundation)
+17. [SSH Access](#ssh-access)
+18. [Derived Attributes (Phase 2.3)](#derived-attributes-phase-23)
+19. [Progression (Phase 2.4): XP Curve, Talents, Prestige](#progression-phase-24-xp-curve-talents-prestige)
+20. [Client UX Enhancements (Phases 3.2, 3.4, 3.7)](#client-ux-enhancements-phases-32-34-37)
+21. [Phase 6 LLM Integration (Design And Foundation)](#phase-6-llm-integration-design-and-foundation)
 
 ---
 
@@ -43,6 +46,8 @@ El detalle histórico de Batches 25–27 que sigue documenta el estado de cada b
 - **Access and security:** Optional SSH supports classic text play and 80×25 Door play with device confirmation, linked keys, guest limits and sanitized terminal output. Public classic device login issues expiring, revocable account sessions via [device login](docs/device-login.md). The fork defaults to local username/password accounts (`auth: local` in `config/gamemode.yaml`); Auth0 is an optional mode that requires audience and issuer only when enabled. HTTP Bearer auth and one-use WebSocket tickets remain the browser contract. Door now supports catalog buy/sell, display names and scripted fights.
 - **Adventure content pack:** `import/adventure/` adds four zones on top of the hub — The Training Grounds (tutorial, 6 rooms), The Buried Vault (13), Frostspine Caverns (12) and The Elder Maw (4-room raid), plus 2 Millstone Hollow hub rooms (37 room files in total) — and 24 items, 22 NPCs, 9 loot tables, 10 spawners, 4 scripts and 2 quests in `pkg/importer` YAML. `pkg/importer/adventure_pack_test.go` loads the pack and `TestAdventurePackHealth` fails the build on any content-health error **or** warning; `TestAdventurePackReachability` fails on unreachable islands. Design: `docs/design/PHASE5_DUNGEONS.md`.
 - **Fork docs:** setup and deployment in `docs/fork-setup.md`; player-facing system guides in `docs/user/` — `clans.md`, `dms.md`, `channels.md`, `party.md`, `combat.md`.
+
+---
 
 ## Data Structures (Entities)
 
@@ -170,7 +175,7 @@ Lower uses dedicated cave/crypt/cellar/sewer floors, merged adjacent rooms, actu
 
 P1d Lower uses rough cave rock, crypt paving/bones, sewer water channels, and wooden cellar floors/barrels with dim cluster light. Only short, aligned known compass exits get visible tunnels; longer/ambiguous links remain usable navigation exits without grey lines across void. Tree/building drop shadows are removed; only restrained mountain face shading remains. On supported browsers an OffscreenCanvas worker builds scene bitmaps while the main thread remains responsive; only one job runs and stale queued exploration work is replaced. Close LOD builds on demand; worker/canvas fallback preserves map behavior if unavailable. Unexplored overworld ground uses a soft volumetric fog overlay (blurred explore-boundary mask + cloud wash) instead of per-tile fog stamps; You / Turn-in / Selected markers paint above it. Authored room coords that treat +Y as north are flipped at compile so Cartographer north paints upward (`?v=mapnorth1`). Cached fog ground is painted once, and real room centers win hit testing over neighboring decorative props.
 
-`GET/HEAD /api/map-tiles/terrain-sheet.png` serves the 288×9024 RGBA sheet with a content-hash query version; live client JS/CSS uses `?v=worldmap-p1j`. Production art is the P1j imagegen craft atlas (content `assets/map-tiles`, version `c8169d17ef81`); Pillow generators (`tools/generate_map_tiles.py`, `tools/map_hires_art.py`) remain for regenerating the older P1g look only. `pkg/worldmap/map_layout.json` configures zone centers, natural ground, town flags, separation, and coast padding; unconfigured zones attach using exits. The layout does not mutate stored coordinates or gameplay topology. See `tools/WORLDMAP-PREVIEW.md`. Ornate banners and map framing ornaments remain later work.
+`GET/HEAD /api/map-tiles/terrain-sheet.png` serves the 288×9024 RGBA sheet with a content-hash query version; live client JS/CSS uses `?v=creamtimber1` (sheet still content-hash busted). Production art is the P1j imagegen craft atlas (content `assets/map-tiles`, version `5caee700810a` (cream-timber settlement stamp remapper on P1j; prior `c8169d17ef81`)); Pillow generators (`tools/generate_map_tiles.py`, `tools/map_hires_art.py`) remain for regenerating the older P1g look only. `pkg/worldmap/map_layout.json` configures zone centers, natural ground, town flags, separation, and coast padding; unconfigured zones attach using exits. The layout does not mutate stored coordinates or gameplay topology. See `tools/WORLDMAP-PREVIEW.md`. Ornate banners and map framing ornaments remain later work.
 
 ### NPC / enemy portraits
 Room presence sends `portrait` URLs (`/api/portraits/{templateOrId}.png`). Import copies `assets/images/sprites/{npcs,enemies}/` into `uploads/portraits/`. Sprites are 512px full-figure art; the original NPC/enemy cards clip a 48px square around the body (`object-fit: cover` + zoom). Missing files fall back to hashed `img/avatars/{1-14}p.png`. Component CSS lives in `public/mud-client/public/extra.css` and must be deployed with `bundle.js`.
@@ -179,7 +184,7 @@ Room presence sends `portrait` URLs (`/api/portraits/{templateOrId}.png`). Impor
 The equipment paper doll, combat card, and party roster use 512px transparent sprites at `/api/portraits/player-<race>-<class>.png`. The set covers Human, Dwarf, Elf × Warrior, Rogue, Mage, Ranger, Cleric, Druid. Stored `elve` maps to `elf`, `wizard` to `mage`, and `hunter` to `ranger`. The server supplies combat and party portrait URLs; the client derives the equipment URL from character race/class. An unavailable combination or failed image uses a class silhouette.
 
 ### Group combat cards
-BattleStage shows the local player and all other combat players (up to the five-player party cap). Compact ally cards display portrait, class, level, live HP/MP, current turn, and down/fled state. WoW-style buff/debuff icon rectangles sit above/beside combat portraits (self, allies, enemies) with remaining rounds from statusEffects. Combat action snapshots carry participant type, class, mana, and status; a join sends the roster to existing fighters immediately and triggers a short join banner. Healing and buffs currently target self or enemies only; ally-card clicks do not queue unsupported commands.
+BattleStage shows the local player and all other combat players (up to the five-player party cap). Compact ally cards display portrait, class, level, live HP/MP, current turn, and down/fled state. gilded fantasy frame buff/debuff icon rectangles sit above/beside combat portraits (self, allies, enemies) with remaining rounds from statusEffects. Combat action snapshots carry participant type, class, mana, and status; a join sends the roster to existing fighters immediately and triggers a short join banner. Healing and buffs currently target self or enemies only; ally-card clicks do not queue unsupported commands.
 
 **Battle layout B (default):** room-field combat for players with no saved preference. Party stands on the left — the player on a gold marker, and, when other players are in the fight, a compact left ally strip (existing portrait, name, slim HP). Enemies stand on the right. Detail frames stay top-left (you: name, HP/MP, buffs) and top-right (focused foe). Sprites use existing race/class and enemy portraits (`/api/portraits/player-<race>-<class>.png` and `/api/portraits/{template}.png`); a class or enemy silhouette is only the failed-load fallback. Over each sprite, only a slim HP bar. Mid-fight Resolving/Waiting pills and turn-name chips stay hidden; the round chip and your-turn countdown remain. Full hotbar 1–9 + Flee dock + room vignette unchanged. Classic cards remain in Settings → Gameplay (turn Battle layout B off), `localStorage.talesmud_battle_layout_b=0`, or `?battleLayout=classic` / `?battlepoc=0`. `?battleLayout=b` / `?battlepoc=1` forces layout B. URL wins over localStorage; an explicit `0`/`1` wins over Settings. Client cache `?v=battleb1`.
 
@@ -257,7 +262,9 @@ type Item struct {
 ### Item Types & Slots
 Stackable item quantities are kept consistent when consumed or partially dropped: the character inventory and backing item instance are both updated.
 
-`unique: true` on an item template means a character can hold at most one copy. Pickup of another (including a boss loot instance) is refused with "You already have the <name>." Extra copies already in the bag are trimmed to one on that attempt. The ground drop is left for someone else.
+`unique: true` on an item template means a character can hold at most one copy. The count covers the bag, equipped gear, and items nested in a container. There is no separate item bank. Pickup of another is refused with "You already have the <name>." Extra copies already in the bag are trimmed to one on that attempt. The ground drop is left for someone else.
+
+A loot entry may set `rarity: unique`, `chance` (a non-zero value wins over `dropChance` at import), and `boss_only: true`. Boss-only entries roll only when the dead NPC's difficulty is `boss`. The unique roll is skipped when every victory recipient already holds that template. A drop from a `rarity: unique` entry sends a room message `UNIQUE: <item name>` with `style: combatEvent`, `hook: unique`, and `source` set to the NPC's display name. The play client frames that victory row and the item card. A template `unique: true` flag still caps ownership and frames the item card on examine. It does not send the room chip on its own.
 
 **Item Types**:
 - `currency` - Gold, tokens
@@ -273,7 +280,7 @@ Stackable item quantities are kept consistent when consumed or partially dropped
 - **Gathering**: room actions `GATHER …` / `FORAGE …` / `HARVEST …` (scripted nodes with deplete flags) plus commands `gather` / `forage` / `harvest [target]`.
 - **Crafting**: `recipes` lists all recipes; bare `craft` opens the same list; `craft <recipe>` consumes mats and grants output. Client seeds a **Recipes** action-bar pin; R0209 also exposes **CRAFT** / **RECIPES** room chips.
 - Optional **stations**: recipe `station: forge` requires room tag `forge` or `crafting`; `campfire` requires `campfire`/`kitchen`/`hearth`. Food/leather recipes craft anywhere.
-- Recipe YAML lives in content `data/recipes/` (loaded from `import/sample-world/data/recipes` at runtime; seed fallback in engine).
+- Recipe YAML lives in content `data/recipes/` (loaded from `import/mvp-rpg-1/data/recipes` at runtime; seed fallback in engine).
 
 **Equipment Slots**:
 - `head`, `chest`, `legs`, `boots`, `hands`, `neck`, `ring1`, `ring2`
@@ -456,7 +463,7 @@ An enemy's authored XP reward is the base. When that reward is 0, `progression.b
 
 Death math is `ruleset.ApplyDeath`, called from defeat only. A fight is a defeat when nobody is still fighting and at least one player is actually dead. When every player has fled or slipped, the fight ends as fled: no XP loss, no gold loss, no armor damage, and no respawn move. A slip that already took one exit stays in that room. In a mixed party only the dead take the penalty. Anyone who fled gets the escaped notice and keeps their hit points, gold, and room. Post-combat cleanup still clears `InCombat` and syncs the escaper's combat hit points.
 
-`combat.pacing: auto` keeps the 5 second decision window and resolves a queued action on the next beat. `turn_based` leaves that window open until the player sends a command. NPCs still take their own turns afterward. The default file is `auto`. During a fight, a bare `attack` queues a swing on the current target or the first living enemy so a turn-based round advances. Outside combat, `combat.bare_attack: ask` (the default) still answers "Attack whom?". `first_hostile` starts the fight against the first hostile in the room.
+`combat.pacing: auto` keeps the 5 second decision window and resolves a queued action on the next beat. `turn_based` leaves that window open until the player sends a command. NPCs still take their own turns afterward. The default file is `auto`. During a fight, a bare `attack` queues a swing on the current target or the first living enemy so a turn-based round advances. Outside combat, `combat.bare_attack: ask` (the default) still answers "Attack whom?". `first_hostile` starts the fight against the first hostile in the room, and says nobody is there when none is.
 
 `combat.disconnect: continue` (the default) leaves a dropped connection in the fight and does not move the character. `release` ends that fight as a flee: no gold loss, no XP loss, and no death flag. `combat.safe_room` is `stay` (default), `bind`, or `start`, and applies only when disconnect is `release`. `stay` leaves the character in a real room. `bind` and `start` move them. A room id containing `~` is treated as an instance even when the in-memory map has lost it, so release still moves that character. A generated instance that times out still moves its occupant to the return room and ends the fight without a defeat. On the next enter, a saved room that no longer exists is replaced by the bind room, then the start room. An orphan `~` id uses the startup sweep's room order instead.
 
@@ -468,9 +475,13 @@ Off: `enabled: false` on that pool (`regen.out_of_combat.hp`, `regen.resting.hp`
 
 `CalculateManaRegen` (1 + WISMod per combat round, minimum 1) is separate from `regen.in_combat`.
 
+`guide.enabled` defaults to on. A world game-mode file may set the same key. `false` builds no next-step hint and the server sends no `guideHint`. An omitted key stays on.
+
+`combat.respawn_min_seconds` defaults to 30. After a death, a spawner waits at least that long before it replaces the corpse. An authored `respawnDelay` still waits when it is longer. `0` disables the floor. Server start still fills `initialCount` immediately. `combat.aggro_on_sight.respawn_grace_seconds` defaults to 8 and holds a fresh respawn that appears on players already in the room. `0` uses `grace_seconds`. `post_combat_grace_seconds` defaults to 10 and holds aggressive NPCs in the fight room after a victory or flee. Leaving that room ends it. `spawn_aggro_cooldown_seconds` defaults to 60 and stops that same spawn, including a replacement, from auto-aggroing the same player again. Another player is still engaged. `attack` still starts a fight. `0` disables a window.
+
 ### Refilling resources
 
-Per-character balances live in the `character_resources` table. A key grants uses only after something configures an allowance (calendar day in a timezone, or a fixed interval). Inside a period, raising the allowance or a modifier does not give the extra uses back; the next period refills to the new amount. An empty catalog, which is the process default, answers every key as not configured and writes no row.
+Per-character balances live in the `character_resources` table. A key grants uses only after something configures an allowance (calendar day in a timezone, or a fixed interval). An optional `label` is a display name; an empty label leaves the key as the name. Inside a period, raising the allowance or a modifier does not give the extra uses back; the next period refills to the new amount. An empty catalog, which is the process default, answers every key as not configured and writes no row.
 
 Another world can use a key for a daily gathering node or a delve ticket, spent from a room-action script. No content ships a key, so play is unchanged. Entering play calls `Get` for each configured key, so a new period is refilled even before a script reads it. A one-word room action accepts a trailing argument (`deposit 20`); the script sees it as `ctx.args`. Multi-word action names stay exact.
 
@@ -638,8 +649,9 @@ already in combat. Joiners receive `combatStart` (BattleStage), initiative is
 rolled, and turn order is rebuilt (current actor preserved). Cross-room join
 is refused. Party membership is **not** required to join; when combat starts,
 same-room online party members get a `[Party] … Type 'attack <enemy>' to join`
-nudge. Out of scope: an interactive need/greed roll UI, auto-pull without attack,
-following anyone except the party leader, Flutter.
+nudge. Out of scope: auto-pull without attack, following anyone except the
+party leader, Flutter. Item Need/Greed is Party Need/Greed v1; the party loot
+rule remains for free/leader/roundrobin auto-assignment.
 
 ### Party Loot & XP Share (v1)
 On victory, gold and XP split equally among the living combatants **and**
@@ -654,7 +666,8 @@ When two or more recipients are in the same party, leftover gold and XP
 lists each recipient (`PARTY SHARE`), and every recipient gets a one-line
 `[Party] Equal split…` toast. Quest kill credit stays with living combatants only.
 
-**Item drops follow the party loot rule** (`party loot`, default `free`):
+**Item drops** use Party Need/Greed when 2+ eligible party members are present;
+otherwise the party loot rule applies (`party loot`, default `free`):
 
 - `free` — drops stay on the ground for normal `pickup` (unchanged legacy behavior).
 - `leader` / `roundrobin` / `needgreed` — each drop is assigned at victory by
@@ -662,13 +675,31 @@ lists each recipient (`PARTY SHARE`), and every recipient gets a one-line
   players in the fight as the eligible list and the party/leader of the first
   living player: the party leader (even when they are not among the eligible),
   the next player in a rotation, or a random eligible player (`needgreed` is a
-  random pick today — there is no roll prompt). Every hand-out is announced as
+  random pick when the roll round does not apply). Every hand-out is announced as
   `[Party] <item> → <name> (<reason>)` and lands straight in that character's
   inventory; if the write fails the item falls back to the room. Assignment runs
   only when the killer's party rule is not `free` (`game_combat.go` builds
   `LootAssignmentContext`). Round-robin position resets per victory.
 
 See `docs/user/party.md` for the player-facing command table.
+
+### Party Need/Greed (v1)
+When a victory has **2+ living same-room online party members** (same eligibility
+band as Party Loot & XP Share), each **item** drop opens a Need / Greed / Pass
+round instead of becoming free ground loot. Gold share is unchanged. Solo and
+non-party kills still drop items to the ground.
+
+Every eligible member gets a `need_greed` popup (item name + quality chrome,
+Need / Greed / Pass, 30s countdown). Commands: `need`, `greed`, `pass`, and
+`loot need|greed|pass`. Need beats Greed beats Pass; ties are uniform random
+among the highest tier. The winner receives the item in inventory (or on the
+ground at their feet if inventory is full). A short `[Party]` line announces who
+won and Need vs Greed. If everyone Passes, or the TTL ends with no Need/Greed,
+the item stays on the corpse/ground as free-for-all. The play roll panel is portaled above the battle stage, so Need, Greed, and Pass stay visible and clickable while the victory or defeat card is up. On narrow or short screens the roll sits at the bottom and the outcome card yields height.
+
+Multiple drops from one kill resolve **one at a time**. Disconnect, leave room,
+die, or leave/kick from the party mid-round counts as Pass. Still out of scope:
+master-looter, bind-on-pickup, cross-room rolls, Flutter.
 
 ### Party Follow
 `party follow` starts following the current party leader. `party unfollow` stops.
@@ -686,8 +717,9 @@ Leaving the party, being kicked, the leader leaving, or a leadership change clea
 the follow flag. The flag is in-memory on the game server. The party payload
 includes `following` for the recipient. The reply is a `[Party] You are following <leader>`
 line (party strip and room toast). Still out of scope: auto-join combat without
-`attack`, an interactive need/greed roll (drops are assigned by the party loot
-rule instead), and following a member who is not the leader.
+`attack`, and following a member who is not the leader. Item Need/Greed is
+Party Need/Greed v1; the party loot rule remains for free/leader/roundrobin
+auto-assignment.
 
 ### Friends (v1)
 Per-character friends list stored as `Character.FriendIDs` (character UUIDs) in
@@ -893,6 +925,15 @@ and calls `POST …/read` for the channel being read. Starting a conversation
 uses `POST /api/dm/channels` (find-or-create), messages load with
 `limit: 100`, and sending posts to the channel. There is **no WebSocket push**
 for DMs — the panel only sees new traffic on its next poll.
+### Responsive notification and sheet behavior
+
+Page layers are named in `public/mud-client/public/global.css`. Shell chrome stays below inventory, social sheets, and invite dialogs. Combat stays below NPC dialogs and Need/Greed. Inventory includes safe-area padding.
+
+`mobileStore.MOBILE_QUERY` selects the Room/Console shell at widths through 768px and at landscape widths through 1024px when height is at most 500px. The home link is hidden for the same query. The room scrolls to its image, NPC cards, hotbar, and actions; Console remains a separate tab.
+
+`QuestNotifications` and `RoomTextOverlay` defer presentation during active combat, an ending outcome, or a pending loot roll. Queues retain unseen entries. The first prioritized quest moment and up to four corner or room messages render at once. Reading clocks pause on removal from the rendered view and resume with the remaining time. A new examine replaces the previous examine and goes first. Continue stays outside the outcome rewards scroll area. Starting, ending, clearing, or dismissing combat cancels the prior outcome timeout. Compact hotbars keep their content height inside the scrollable room. Short landscape uses `--entity-card-width` to fit NPC cards inside the hero image. Short landscape puts the outcome and roll in separate horizontal lanes.
+
+The next-step guide hides over inventory, party, friends, recipes, and map sheets, and hides when no room hotbar is visible. Scroll events clear its old placement before the next frame so it cannot cover newly scrolled hotbar slots. Notifications and mobile sheets honor the system reduced-motion preference.
 
 ### Client Session UX
 The MUD client exposes connection state in `MUDXPlusStore`:
@@ -971,14 +1012,19 @@ them are documented in the Phase 6 section, under
 
 ### NPC Behavior Loop
 NPCs are processed by the game update loop every 10 seconds:
-- `idle` NPCs with `WanderRadius > 0` move through visible exits while staying within that many room hops from `SpawnRoomID`.
-- `patrol` NPCs follow `PatrolPath` as a looping ordered list of room IDs. If the current room is not in the path, the NPC moves to the first patrol room.
+- Idle/patrol NPCs use the optional `movement` block (`mode: route|roam`, `route`, `loop: loop|pingpong`, `zones`, `rooms`, `intervalSeconds`, `jitterSeconds`, `pauseOnEngageSeconds`, `leaveMessage`, `arriveMessage`). A spawner may replace the whole block. Timing defaults to 90 seconds, jitter defaults to 0 and adds uniform 0–jitter seconds, and engage pause defaults to 120 seconds. Timings are integers in 0–86400; zero uses the timing defaults except jitter. The first move is scheduled on registration. Ticks round execution up by at most 10 seconds.
+- `PatrolPath` without a movement block maps to a loop route in idle or patrol state. `WanderRadius` without a block maps to random roaming within that many permitted exit hops of spawn. A movement block takes precedence.
+- Movement is strictly opt-in per NPC. No block, positive radius or path means stationary, including shop/dialog NPCs and patrol-state NPCs. Spawners inherit explicit template configuration and add no movement defaults.
+- Route steps, loop closure and both directions of pingpong must have adjacent ordinary exits. Invalid configuration is reported by the `npc-movement` health rule / `tales -check` and skipped at runtime. Walking excludes hidden, locked (typed flag or `params.locked`), instance and teleport exits, instance rooms/copies, and rooms tagged `noNPC`/`no-NPC` or `noWander`/`no-wander`. Zone and room whitelists intersect.
+- Talking, looking/examining, targeting, shop/trade/buy/sell refresh the per-instance pause. A dialog or shop session holds movement until the dialog ends, the shop closes, the player leaves the room, changes characters, or disconnects. An authored exit (an option or answer with `isDialogExit`, or an option with no further choices) sends `dialogEnd` and releases the hold. The web dialog panel shows the portrait, name, speech, and those choices; it has no separate leave button and closes on `dialogEnd`. Shop close and Escape still send `shopclose`. Other clients may send `dialogclose` or `shopclose`. A client that never ends the dialog keeps the hold until the player leaves or disconnects. NPC movement is serialized with commands. Combat/dead NPCs never walk.
+- Runtime `nextMoveAt`, `pausedUntil` and pingpong direction are memory-only. On registration an invalid current room resets to an allowed spawn/first route room; no valid start means no walking. Spawns and residents return to authored placements after restart. Aggressive wanderers must be non-boss and level >= 10; arrival uses normal aggro scheduling and room sanctuary rules.
+- The NPC inspector shows static movement and live current room, next move time/ETA, paused-until and session hold; `/api/live/npcs` adds these fields. The world map has a Wanderers layer from live positions (refresh to update).
 - NPCs with `IdleDialogID` and `IdleDialogTimeout` broadcast ambient chatter to their current room when the cooldown has elapsed.
-- Dead spawned instances are removed for spawner replacement; dead unique NPCs respawn at `SpawnRoomID` after `RespawnTime`.
-- An enemy with `aggroOnSight` engages a player who enters its room, and engages players already there when it spawns, respawns, or walks in. `config/ruleset.yaml` `combat.aggro_on_sight` defaults to on, 2.5s grace, level gap 5, and 15s reaggro cooldown. That quiet period also covers other aggressive NPCs still in the room. `enabled: false` stops it. The sight line is ordinary text. The fight then uses the same path as `attack`.
-- NPC movement sends silent room updates so clients refresh NPC presence without reprinting the room description.
+- Dead spawned instances are removed for spawner replacement. The spawner waits `respawnDelay`, and at least `combat.respawn_min_seconds`, after that death. Dead unique NPCs respawn at `SpawnRoomID` after `RespawnTime`.
+- An enemy with `aggroOnSight` engages a player who enters its room, and engages players already there when it spawns, respawns, or walks in. `config/ruleset.yaml` `combat.aggro_on_sight` defaults to on, 2.5s grace, level gap 5, and 15s reaggro cooldown. That quiet period also covers other aggressive NPCs still in the room. A fresh respawn uses `respawn_grace_seconds` (default 8) for players already there. After a victory or flee, `post_combat_grace_seconds` (default 10) holds the fight room, and ends when the player leaves. `spawn_aggro_cooldown_seconds` (default 60) is per player and spawn, so a replacement remembers the same player. `enabled: false` stops sight aggro. The sight line is ordinary text. The fight then uses the same path as `attack`. A room with `noAggro` skips both the grace watch and the fire. Look and examine of an `aggroOnSight` NPC include the line `Aggressive`.
+- NPC movement sends ordinary room prose to both rooms and existing `roomUpdate` payloads so web/Flutter refresh presence without reprinting the room description. Messages default to `{name} heads {dir}.` and `{name} arrives from the {fromDir}.`; direction comes from the real exit.
 
-Room NPC payloads sent to the MUD client include `isEnemy`, `isMerchant`, `isQuestGiver`, `hasDialog`, `hasIdleDialog`, and `state` so the UI can show interaction badges without duplicating backend lookup rules.
+Room NPC payloads sent to the MUD client include `isEnemy`, `isMerchant`, `isQuestGiver`, `hasDialog`, `hasIdleDialog`, `aggroOnSight`, and `state` so the UI can show interaction badges without duplicating backend lookup rules. An `aggroOnSight` enemy card shows a red Aggressive label. The `aggroOnSight` JSON field is omitted for passive NPCs. `noAggro` survives room import/export and instance cloning; it suppresses automatic aggression without blocking a manual attack.
 
 ### NPC Factory and Level Scaling (client, Batches 16/19)
 
@@ -1047,7 +1093,7 @@ type MerchantItem struct {
 
 Merchant commands are available in rooms with merchant NPCs:
 - `list`, `shop`, or `trade` (exact key — no NPC name) opens a structured `shop` WS payload for the client overlay and refreshes after buy/sell
-- `buy <item> [quantity]` purchases stock; stackable quantities can fit in one inventory stack
+- `buy <item|number> [quantity]` purchases stock. A bare number is the 1-based catalog row. Stackable quantities can fit in one inventory stack. `sell` accepts the same number for items that merchant will take.
 - `sell <item> [quantity]` sells accepted, unbound inventory items
 - `value <item>` / `price <item>` checks the merchant's sell price
 
@@ -1063,8 +1109,9 @@ type NPCSpawner struct {
     TemplateID    string         // NPC template to spawn
     RoomID        string         // Where to spawn
     MaxInstances  int            // Max alive at once
-    SpawnInterval time.Duration  // Time between spawns
+    SpawnInterval time.Duration  // Time between extra spawns above InitialCount
     InitialCount  int            // Spawn on world load
+    RespawnDelay  time.Duration  // Wait after a death before replacing
 
     RespawnTimeOverride *time.Duration  // Override template respawn
 }
@@ -1072,7 +1119,9 @@ type NPCSpawner struct {
 
 **Spawner Behavior** (automated by server):
 - Checks every 5 seconds
-- Spawns instances up to `MaxInstances`
+- Fills `InitialCount` immediately when the spawner has not lost an instance yet
+- After a death, waits the longer of `RespawnDelay` and `combat.respawn_min_seconds` (default 30s, `0` disables the floor)
+- `SpawnInterval` spaces only the extras between `InitialCount` and `MaxInstances`
 - Tracks live instances via `NPCInstanceManager`
 
 ### NPC Resident System
@@ -1224,9 +1273,9 @@ difficulty_multipliers:
     attack: 1.5
     defense: 2.0
   hard:
-    hp: 1.26
+    hp: 1.25
     attack: 1.18
-    defense: 1.26
+    defense: 1.25
   boss:
     hp: 2.0
     attack: 1.5
@@ -1256,6 +1305,13 @@ Players and NPCs both use `CombatantRef.Level`, copied from the character or NPC
 
 After the level-gap multiplier and before a crit, `damage_dealt` scales hits that class lands and `damage_taken` scales hits that class receives. `behind_dealt` multiplies `damage_dealt` again when that class is the lower level. Class id `wizard` uses the `mage` row. A missing class or a multiplier of 1 leaves that side unchanged. A loaded class pack overrides this file. Ward's pack row takes damage at 1.00, so a soak hit is not larger than the unscaled blow, and the template's stamina is what grows the later hit-point pool. Grit is still gained from a connecting hit. A soak class's Slam prints a miss and starts its cooldown only when the swing hits. The level-10 gap table uses this so warrior, rogue, ranger, and mage share one band: at-level bosses about 50–65%, and a good-gear boss three levels up about 50%.
 
+### Early-game curve
+**Config**: `early_normal` and `newbie_curve` in `config/combat_balance.yaml` (defaults in `pkg/mudserver/game/balance/difficulty.go`).
+
+`early_normal` multiplies the normal-tier factors again, before the integer truncate, when the enemy level is in 1..`max_level` (6). Other tiers, named overrides, and normal enemies above that level stay on the tier table. A level-2 Sample Thug authored at 18 HP / 4 ATK / 1 DEF is `18 * 2.7 * 0.42 = 20` HP and `4 * 1.35 * 1.45 = 7` ATK. Level 0 (the multiplier helper with no level) still returns the old 48 / 5 / 1, so a caller that does not know the level does not invent the curve.
+
+`newbie_curve` applies only while that combatant is level 1–5. It does not change `class_balance` and does not move the level-10 gap table. Mage damage dealt is ×1.15 and damage taken is ×0.32. Rigger damage dealt is ×1.30 and damage taken is ×0.95. When the attacker is at least `uphill_gap` (2) levels higher and is itself level 6 or below, damage taken is multiplied again by that class's `uphill_taken` (warrior 2.2, rogue 1.5, ward 1.5, mage 1.0, rigger 1.0). A level-9 bounty spider does not get the uphill factor. Import stores the scaled stats once. The content-health NPC export writes the authored numbers back into the importer fields and adds a `combat` block with authored and effective HP, attack, and defense. See `docs/COMBAT-BALANCE.md`.
+
 ### Boss telegraph and enrage
 **Config**: `boss_mechanics` in `config/combat_balance.yaml`.
 
@@ -1277,12 +1333,14 @@ Clicking or pressing Enter on an equipped paper-doll slot opens the shared item 
 ### Viewport layout presets
 Combat start/join promotes the existing full-screen BattleStage cover using the layout focus/save contract. The widgets and terminal remain mounted with their prior geometry and active tabs. Victory/defeat dismissal, outcome timeout, and combatLeave restore the previous arrangement, including a manually focused panel; viewport fitting resumes on restore. Save and Save as template retain the normal arrangement during combat. Keyboard focus moves to the stage only when no command input or other text field is active, and returns to the prior control when the stage closes unless the player has focused another field. The combat stage fits Compact and phone viewports without document scrolling.
 
+On phone, tablet, and short landscape, Stats, Equip, Skills, and Quests open the same Character, Equipment, and Quest Log widgets inside the bottom sheet. Skills is the Character widget opened on the skills tab, including Add to hotbar. A quest tap opens one framed popup with the description, objectives and progress, area, turn-in room, rewards, and turn-in hint when the log entry has those fields. Tap outside the sheet or the close button dismisses it. The sheet band stops at the header and the visible hotbar, so those controls stay clickable. The room hotbar wraps so each slot is at least 44px and at most 56px. Header, badge, console input, font step, and sheet controls use the same 44px hit area. Phone console body text is at least 14px. Typing the same words in the console still sends them. The desktop grid is unchanged. Play cache tag `?v=v056`.
+
 The Settings panel opens from the account chip and Escape closes it. `interface.battleLayoutB` defaults to true (Layout B). Turning it off selects Classic cards and stores `talesmud_battle_layout_b=0`; a missing key is not an opt-out. `interface.combatAutoFocus` defaults to true; turning it off keeps the room layout visible on combat start/join and provides an explicit Open BattleStage control during active combat. That control uses the same transient focus/restore behavior. `interface.reducedMotion` defaults to `system`; `on` suppresses BattleStage phase, hit, ally, and loot animations plus map ambience, while `off` permits them even when the OS requests reduced motion. `interface.inventoryOpenMode` chooses the existing overlay or layout widget and applies immediately. These choices persist in local storage, not server settings. The General tab labels audio as coming soon because no game audio path consumes the stored sound fields. The old Compact Mode and Room Text Overlay fields remain readable for existing local settings but their controls are hidden because they have no active presentation consumer.
 
 With no usable saved layout, the play client picks Compact (under 1100px wide, room stacked over the terminal), Desktop, or Wide from the window size, and sizes the grid so the widgets fit the viewport height with no page scroll. Empty, unknown, malformed, or wholly hidden saved grids fall back to that preset. Desktop and Wide put the room on the left. On the right, Character and Equipment share one tab container (Character open), Terminal, Quest Log, and Map share another (Terminal open), and Inventory sits under those tabs, with the action bar across the bottom. Nothing in that preset crosses the 24-column grid or another widget. The room scene shrinks to share the panel with the description, and a long description scrolls inside the room. Panel padding and the character sheet are tight enough that attributes and combat stats fit in the Character tab at 1080p. Compact stays a stack and does not add the sheet. A saved layout that is taller than the window is scaled down for display (the action bar stays on the bottom row); Save still writes the player's unscaled rows. Compact and phone may still scroll. The spell bar is docked in the top of the action bar instead of a separate row and has nine slots. Keys 1–9 fire those slots, Tab cycles living combat targets, Escape closes the top open panel (shortcut list, dialogs, map, inventory, the battle outcome, the account menu, a focused widget, then edit mode), and `?` opens the shortcut list. Those keys do nothing while the command line or any text field is focused. Focusing a widget still covers the grid, and Save stores the arrangement from before that cover. Resize reflows that preset. A saved layout is kept, clamped back onto the 24-column grid (minimum 2×2, nothing past the right edge), and scaled vertically when it is taller than the window. A saved full-width spell bar that sits directly on the action bar is folded into that dock on load; a spell bar placed somewhere else stays its own widget and can still be moved in edit mode. Edit mode can switch Compact / Desktop / Wide without deleting a saved layout until Save. Guests open the same editor from the account menu. The toolbar has multi-step Undo, Reset, and a Lock toggle that keeps edit mode open but stops dragging and resizing. Corner handles stay visible while the layout is unlocked, and a gold ghost shows where a widget will land. A guest token in this tab is restored after a reload, so crossing into a mobile-emulation reload does not dump the session back to the welcome screen. Panels share one header (title, collapse, focus) in the same type and padding; the inventory overlay keeps a single title. A tab container uses that same single row: the tabs sit on the left, and collapse and focus stay on the right. Extra tabs scroll sideways and, past three, also open from a More menu. There is no separate "Tab container" title. The account chip, Edit Layout, and the Party and Friends buttons share one header row in that top band: same height, gold border, and gold hover. Edit Layout is its own button until the window is under 1100px wide, where it moves into the account menu. The menu is gold, lines up with the chip's right edge, and closes on Escape or an outside click. On a phone the same menu hangs from the account button in the room header and includes Switch character, Log in / Save progress for guests, and Log out for a signed-in player. Terminal lines wrap on word boundaries inside the panel; a token longer than the row may still break. Resizing the terminal reflows that scrollback.
 
 ### Reward scaling
-`reward_scale` in `config/combat_balance.yaml` multiplies each enemy's base XP and gold by that threat tier. The reference level is the **highest** level among characters who receive the victory split (living fighters plus same-room online party), so a high-level member greys out the whole award. Defaults: grey 15%, green 60%, yellow 100%, orange 125%, red 150%, skull 200%. A boss's first kill for a character adds `first_kill_bonus` (default 50%) of that character's own share of the boss, once, stored on `Character.FirstBossKills` (`tpl:<templateId>` or `name:<lower name>`). A missing item icon swaps once to `/api/item-art/generic-<type>.png`, then the default generic, then a built-in silhouette. A missing enemy or NPC portrait swaps once to a built-in silhouette (enemies darker, friendly NPCs gold). A player with no portrait file, including a guest on the battle card, uses a class silhouette. Those stand-ins are data URIs, so a failed image cannot loop or stay as a broken icon. `combatEnd` still carries `outcome` and the human `message`. Victory adds `rewards` (base, level modifier, first-kill, share) plus `loot` (`name`, `quality`, `quantity`) and `levelUp` (`oldLevel`, `newLevel`) when a level was gained. Defeat adds `defeat` (`xpLost`, `goldLost`, `armor`, `respawnRoom`, `hp`, `maxHp`). Older clients ignore the extra fields. BattleStage shows that breakdown, reveals each drop one at a time in its rarity color, and calls out the new level. The terminal still gets the full text. The panel sits over the room, dismisses on click, Enter, or Escape, and does not take pointer events away from the terminal. Typing in the command line keeps Enter.
+`reward_scale` in `config/combat_balance.yaml` multiplies each enemy's base XP and gold by that threat tier. The reference level is the **highest** level among characters who receive the victory split (living fighters plus same-room online party), so a high-level member greys out the whole award. Defaults: grey 15%, green 60%, yellow 100%, orange 125%, red 150%, skull 200%. A boss's first kill for a character adds `first_kill_bonus` (default 50%) of that character's own share of the boss, once, stored on `Character.FirstBossKills` (`tpl:<templateId>` or `name:<lower name>`). A missing item icon swaps once to `/api/item-art/generic-<type>.png`, then the default generic, then a built-in silhouette. A missing dialog bust tries the full-body portrait, then a built-in silhouette (enemies darker, friendly NPCs gold). A missing enemy or NPC portrait swaps once to that silhouette. A player with no portrait file, including a guest on the battle card, uses a class silhouette. Those stand-ins are data URIs, so a failed image cannot loop or stay as a broken icon. `combatEnd` still carries `outcome` and the human `message`. Victory adds `rewards` (base, level modifier, first-kill, share) plus `loot` (`name`, `quality`, `quantity`) and `levelUp` (`oldLevel`, `newLevel`) when a level was gained. Defeat adds `defeat` (`xpLost`, `goldLost`, `armor`, `respawnRoom`, `hp`, `maxHp`). Older clients ignore the extra fields. BattleStage shows that breakdown, reveals each drop one at a time in its rarity color, and calls out the new level. The terminal still gets the full text. The panel sits over the room, dismisses on click, Enter, or Escape, and does not take pointer events away from the terminal. Typing in the command line keeps Enter.
 
 ---
 
@@ -1339,10 +1397,10 @@ IsCasterClass(classID) bool               // Uses mana
 ```
 
 ### Skill Slot Progression
-| Class | L1 | L10 | L15 | L20 | L30 |
-|-------|:--:|:---:|:---:|:---:|:---:|
-| Mage/Cleric/Druid | 2 | 2 | 3 | 3 | 4 |
-| Warrior/Rogue/Ranger | 1 | 2 | 2 | 3 | 4 |
+A class with `hotbar_cap` in the class catalog always has that many slots (the signed pack uses 4). Cleric and druid stay on the caster curve (L1=2, L15=3, L30=4). Ranger stays on the physical curve (L1=1, L10=2, L20=3, L30=4). Stored ids such as hitch still resolve through the catalog.
+
+### Class kit
+Class names, blurbs, race lists, portraits, and kit skills live in the world pack under `data/classes/*.yaml`. The engine loads them into `pkg/classkit` at startup and on import. `GET /api/classes` is the public payload the play client reads (`?v=classkit1`). With no pack, the catalog is the generic Warrior / Rogue / Mage sample. `ClassKit()` builds skill rows from that catalog. `SkillsForClass` drops legacy seed rows for a kit class. Cleric, ranger, and druid stay in the static client catalog. Old ids such as Fireball and Power Strike remain display fallbacks for a saved hotbar and are not offered as Available. `config/combat_balance.yaml` `class_balance` is only the numeric fallback when the catalog has no row.
 
 ### Skill Management Commands
 ```bash
@@ -1354,13 +1412,7 @@ skills unequip <name>   # Remove skill from slots
 **Combat Restrictions**: Cannot equip/unequip during combat
 
 ### Default Skills Seeding
-29 default skills seeded on first run when DB is empty:
-- Warrior: Strike, Cleave, Berserker Rage, Shield Bash, Whirlwind
-- Rogue: Backstab, Poison Strike, Shadow Step, Eviscerate
-- Ranger: Aimed Shot, Multi-Shot, Hunter's Mark, Piercing Arrow
-- Mage: Fireball, Ice Lance, Lightning Bolt, Arcane Missiles, Meteor
-- Cleric: Heal, Holy Smite, Divine Shield, Prayer of Healing, Resurrection
-- Druid: Heal, Moonfire, Thorns, Regrowth, Starfall
+An empty database seeds `SeedSkills()` (legacy class rows plus `ClassKit`). An existing database upserts the class kit on startup. Kit classes only see kit skills. Cleric, ranger, and druid still use their seeded rows.
 
 ### Class Catalog & Magic Schools (`pkg/classkit`)
 The combat kit's classes come from a **world-pack catalog**, not the database. `pkg/classkit` loads every `*.yaml` in the first directory found, in order: `CLASSKIT_DIR`, `import/mvp-rpg-1/data/classes`, `../talesmud-rpg-1/data/classes`, then `data/classes` (found by walking up from the working dir). With no pack, the catalog falls back to the generic Warrior/Rogue/Mage sample trio. The fork ships its own pack in `data/classes/` (format and schools documented in `data/classes/README.md`).
@@ -1637,9 +1689,10 @@ Enhanced notification system with interactions:
 - Smooth transitions
 - Accepting a quest refreshes the open Talk dialog so `[Quest]` becomes `[In Progress]` without closing Talk
 - Quest log: READY + turnInAnywhere shows **Turn In** (`complete <name>`); otherwise a **Turn in: &lt;NPC&gt;** hint
+- **Next-step hint** (`guideHint`): one leather/bronze chip for a character who has not finished a quest and has not dismissed it. Optional quest field `guide: true` (YAML `guide`, JSON `guide`) selects that quest. With no flag, active quests are the pool and an open kill wins. Steps are talk/accept, head along a visible exit, fight (`attack <name>`, text `Attack the <name>.`), and turn in (`complete <name>` or talk). Hint text does not say tap or click, so web, telnet, SSH, and Door show the same line. `guide dismiss` sets `flags.guideDismissed` on that character. The chip is portaled to the page, sits above the hotbar, and hides during combat, dialog, shop, and Need/Greed. It does not cover `.room-name` or `.hotbar-widget`. `guide.enabled: false` in the ruleset or a game-mode file turns the hint off for every character and sends nothing.
 
 ### Spell Bar / Hotbar
-- 8 square slots docked on top of the desktop action bar (a placed hotbar widget still floats on its own). Mobile keeps its own strip
+- Nine square slots docked on top of the desktop action bar (a placed hotbar widget still floats on its own). Mobile keeps its own strip. At 375px the room strip and the combat-dock row shrink the slot and the gap so slots 1 through 9 stay fully inside the viewport.
 - Bind equipped combat skills (`cast` / combat-only) or inventory consumables (`use`)
 - Look / Talk / Flee are bindable actions but **not** seeded by default
 - Rest is seeded on an empty/default hotbar (slot 7). Customized binds are never overwritten
@@ -1892,6 +1945,7 @@ type DialogState struct {
 - **Variations** - Random or sequential alternate texts
 - **Exit markers** - Return to "main" node on completion
 - **Free-form complement (`ask` and `talk`, Batches 25–29)** — además de `ask <npc> [question]`, `talk` saluda con LLM solo cuando faltan diálogo autoral y quests; el texto libre puede continuar una conversación `__llm__` elegible. Las opciones del LLM pueden continuar el árbol autoral, pedir seguimiento, terminar o ejecutar una acción `quest:<id>` disponible y validada. Memoria/personalidad y relaciones dinámicas siguen el flujo descrito en Fase 6; el LLM no crea quests. El flujo autoral y sus quests mantienen prioridad.
+- **Play overlay** - Dialog and shop are portaled to the page layer (`position: fixed`). Phone and tablet (≤768px), and any window shorter than 500px, use a scrollable bottom sheet with safe-area padding. The shop close control stays in the header. A dialog × is shown only when the current node has an exit choice, and it selects that choice. There is no separate Leave conversation control. Taller desktop windows keep centered panels that scroll inside the viewport. Play cache tag `?v=curve1`.
 
 ### Dialog API
 ```lua
@@ -2044,6 +2098,12 @@ tales.game.setFlag(characterID, flagName, value)
 -- characterID: string
 -- flagName: string
 -- value: bool, number, string, or nil (nil deletes the flag)
+
+tales.game.clearGear(characterID)
+-- Deletes worn items and bagged weapons and armor. Other bag items stay. Returns how many were removed.
+
+tales.game.equipFromTemplate(characterID, templateID)
+-- Creates an instance of a template and wears it in that template's slot, replacing the piece already there.
 ```
 
 #### Hidden Exit Reveals (Per-Character)
@@ -2102,7 +2162,7 @@ tales.combat.applyEffect(targetID, effectID) -- existing buff or debuff only
 tales.combat.summon(templateId, count)    -- enemy-template adds spawned (0 on failure)
 ```
 
-`summon` uses the running enemy-hook fight and room. `count` clamps to 1..3 and to whatever remains of a fight cap of 3. Adds copy template stats, are not charged to a spawner, grant no loot, gold, XP, or quest credit, and are removed when the fight ends (win, lose, flee, or timeout). Each add may run its own `onAggroScript` once.
+`summon` uses the running enemy-hook fight and room. `count` clamps to 1..3 and to whatever remains of a fight cap of 3. Adds copy template stats, are not charged to a spawner, grant no loot, gold, XP, or quest credit, and are removed when the fight ends (win, lose, flee, or timeout). Each add may run its own `onAggroScript` once. When any combatant dies or flees, they leave the turn order and the current index stays inside the remaining order. If that index is past the end, the next tick wraps into the following round and ends the fight when it is over, so an add dying cannot stall the fight until the idle timeout.
 
 ### tales.items Module
 ```lua
@@ -2170,6 +2230,12 @@ tales.characters.applyLevels(characterID)
 -- Class, skills, inventory, gold, and flags are left alone.
 tales.characters.setProgress(characterID, level, xp, maxHP)
 
+-- Permanent combat grant. kind is "attack", "defense", or "maxHP".
+-- One call changes that stat by at most 10. Attack and defense grants stay in 0..40.
+-- Max hit points stay in 1..5000. A positive maxHP grant also raises current hit points.
+-- Zero leaves a classic character unchanged. Returns false for an unknown kind or a zero delta.
+tales.characters.grant(characterID, kind, delta)
+
 -- Read-only top list. n defaults to 12 and is capped at 50.
 -- sortKey "xp" orders by experience. Any other key orders by level, then experience.
 local rows = tales.characters.top(n, sortKey) -- rows[i].name, .level, .xp
@@ -2210,6 +2276,10 @@ local isMerchant = tales.npcs.isMerchant(npcID)
 local templates = tales.npcs.getTemplates()
 local isTemplate = tales.npcs.isTemplate(npcID)
 local instance = tales.npcs.spawnFromTemplate(templateID, roomID)
+local started = tales.npcs.beginFight(characterID, instanceID)
+-- Starts a real fight when both are in the same room, the target is a living enemy,
+-- and neither is already fighting. Returns false during the post-combat breath window.
+-- The caller chose the target, so this does not print an over-level warning.
 local inst = tales.npcs.getInstance(instanceID)
 local instances = tales.npcs.getInstancesInRoom(roomID)
 
@@ -2221,7 +2291,7 @@ local died = tales.npcs.damageInstance(instanceID, amount)
 tales.npcs.healInstance(instanceID, amount)
 tales.npcs.moveInstance(instanceID, roomID)
 
--- Delete
+-- Delete the saved row and, when a game is running, the live instance.
 tales.npcs.delete(npcID)
 ```
 
@@ -2334,7 +2404,7 @@ Each script type receives a `ctx` global table with different fields. Access fie
 - Context varies by event type. Enemy hooks set `ctx.hook`, `ctx.roomId`, `ctx.npc`, `ctx.opponents`, and `ctx.allies`.
 - `tales.combat.summon(templateId, count)` spawns enemy-template adds into the current fight. Count clamps to 1..3 and to the remaining fight cap of 3. Adds grant no loot, gold, XP, or quest credit and are removed when the fight ends. Unknown template, non-enemy, no fight, or a full cap returns 0.
 - Room lines from `tales.game.msgToRoom` and `tales.game.msgToRoomExcept` during an enemy hook stay `type: "message"` and `username: "SYSTEM"`. They also carry `style: "combatEvent"`, `hook` (`onAggro`, `onLowHealth`, `onDeath`, `onFlee`), and `source` (that NPC's display name). Other scripts omit those fields. A hook flush that summoned adds sends `combatStatus` with the live `combatants` roster immediately.
-- The play client renders `style === "combatEvent"` as a gold chip in the BattleStage combat log (icon per hook, `source` as a small label) and still prints the plain line. Cache-bust for that client is `?v=hooks2`.
+- The play client renders `style === "combatEvent"` as a gold chip in the BattleStage combat log (icon per hook, `source` as a small label) and still prints the plain line. Hook `unique` is the room announcement for a one-per-character drop, sent by the loot path rather than a Lua hook. Cache-bust for that client is `?v=uniques1`.
 
 ### Context Variable Quick Reference
 
@@ -2368,7 +2438,7 @@ All entity editors use a unified **filterable, sortable data table**:
 **MANDATORY UI GUIDELINE**:
 - **NEVER use `<select>` dropdowns for entity ID references**
 - **ALWAYS use `EntitySelectButton` + `EntitySelectModal`**
-- Provides filterable DataTable for selecting rooms, NPCs, items, scripts, dialogs, quests
+- Provides filterable DataTable for selecting rooms, NPCs, items, scripts, dialogs, quests, and loot tables
 - Scales to hundreds of entries with search and filter
 
 ```svelte
@@ -2386,22 +2456,56 @@ All entity editors use a unified **filterable, sortable data table**:
 Creator editors share backend validation rules from `pkg/service/validation`:
 - Inline validation panels show errors and warnings for the selected draft entity.
 - Save/update requests for rooms, items, NPCs, NPC spawners, dialogs, loot tables, quests, and scripts reject error-severity broken references before data is stored.
-- World Health runs cross-world diagnostics and reports structured issues with `severity`, `entityType`, `entityId`, `field`, `code`, and `message`.
-- Data table rows surface warning/error indicators when stored entities have diagnostics.
+- World Health runs cross-world diagnostics and reports structured issues with `severity`, `entityType`, `entityId`, `field`, `code`, and `message`. The message column is visible and wraps. Room, NPC, dialog, quest, item, and script IDs link to that editor with `?id=`.
+- Content health (`GET /api/health`, `tales -check`) adds reachability islands, reveal scripts that name a missing exit, hidden exits with no revealer, quest objectives that cannot complete, bosses with no spawner, unknown difficulty tiers, unreferenced scripts, dangling exits, missing room items, and pack rules. A quest reward counts as an obtainable item when that quest can complete and its prerequisites can precede the quest that needs the item. Reachability starts at `startRoomID` when that room exists, otherwise the engine default. The content commit is that folder's own git HEAD, or `CONTENT_COMMIT` / `.content-commit`, or `unknown`. Live health warns with `deploy-tree-dirty` when the server checkout has tracked changes outside `import/`. `tales -check` does not run that rule. Hits can be muted. Drift compares the database with the last import. An enemy export writes authored HP, attack, and defense into the importer fields when a content base exists, and adds a `combat` block with authored and effective numbers. See `docs/content-health.md`.
+- Dialog validation allows a node ID to be reached more than once, including shared branches and cycles. It reports `duplicate_dialog_node` only when two definitions of the same node disagree. Option edges that point at a node are not a second definition.
+- Merchant stock with `maxQuantity` -1 is unlimited. Only values below -1 are warned.
+- Deletes that call a DELETE API open a confirm dialog (entity type, name, and ID) before the request. The same dialog covers map room delete, saved spawner delete, room item removal, special exit removal, dialog-graph option and answer removal, and bulk deletion of deprecated scripts. Unsaved form rows (patrol stops, quest objectives, cardinal exits, room actions, alternate texts) stay immediate.
+- Data tables show the full entity ID, with a tooltip and a copy button. The row dot marks validation errors and warnings. NPC type (Enemy, Merchant, both, Neutral) is a text badge.
+- Opening a creator editor URL with `?id=<entityId>` selects that entity after the list loads. The dialog graph honors the same query.
+- Ctrl+K or Cmd+K opens a search palette over rooms, NPCs, items, dialogs (including node text), quests, scripts, loot tables, spawners, skills, and character templates. Results stay grouped by type. Enter opens that entity's Creator path. A loot table opens `/creator/loot-tables?id=`. A spawner opens `/creator/spawners?id=`. The shortcut is ignored inside an input, a textarea, or the script editor. The top-bar search box (`data-creator-search`) opens the same palette and shares its query.
+- Rooms, NPCs, items, dialogs, quests, scripts, loot tables, and spawners show a collapsed "Referenced by (n)" panel under the form. Deleting one of those entities warns when something still references it.
+- Data table rows surface warning/error indicators when stored entities have diagnostics. An editor-specific row indicator is not used for NPC type.
 - Preview/test tools validate draft dialogs, quests, rooms, merchants, and Lua scripts before content is published into the world.
 
-### Creator Tabs
-1. **Rooms** - Full room editor (exits, actions, spawners, NPCs, items, scripts)
-2. **Items** - Item instances and templates
-3. **Item Templates** - Reusable item blueprints
-4. **NPCs** - NPC templates and unique NPCs
+### Creator navigation
+The Creator screens sit in a left sidebar instead of a horizontal tab row. Groups are World (Rooms, World / Zones, Spawners, Health), Actors (NPCs, Loot tables, Character Templates, Items), Narrative (Dialogs, Dialog Graph, Quests), Systems (Skills, Scripts, Settings), and Operate (Players, Audit log, Drift). Players stays admin-only. Audit log and Drift stay visible to creators. `/creator` still opens Rooms. `?id=` links are unchanged. `/creator/quests/debug` stays on the Quests item. `/creator/npcs?view=inspector` and `/creator/rooms?view=inspector` open the inspector for the selected id. `?tab=inspector` opens the same inspector on both editors. New links use `?view=inspector`.
+
+The sidebar collapses to an icon rail from its toggle or Ctrl+B / Cmd+B. The shortcut is ignored in inputs, textareas, selects, contenteditable editors (the script editor), and CodeMirror. Collapse and per-group folds persist in `localStorage` (`tales.creator.nav.v1`). The group that contains the current page opens on navigation. Below 1024px the rail is an off-canvas drawer: the top bar shows a menu button, and the backdrop, Escape, or a navigation click closes it.
+
+The top bar keeps the app links, a search box (`data-creator-search`) that opens the search palette, and the red LIVE badge when `ADMIN_ENV_LABEL` is set. Below 1024px the text links and the search box are hidden so the badge stays on one row. Ctrl+K still opens the palette.
+
+### Creator screens
+1. **Rooms** - Full room editor (exits, actions, spawners, NPCs, items, scripts) plus an Inspector tab
+2. **Items** - Live item instances at `/creator/items`. That route stays available and is not in the sidebar.
+3. **Item Templates** - Reusable item blueprints. The sidebar entry is labeled Items.
+4. **NPCs** - NPC templates and unique NPCs. The detail switches between the form and an Inspector. The loot table id links to the loot tables page.
+4a. **Loot tables** - `/creator/loot-tables`. Entries pick an item template and set chance, min/max quantity, boss-only, and guaranteed. Roll ×N calls `POST /api/loot-tables/:id/roll` and shows how often each item dropped. The same seed repeats. The preview does not create items.
+4b. **Spawners** - `/creator/spawners` under World. The list shows room, template, max, respawn time, and a live count from `GET /api/live/npcs` (same template and room, skipping dead copies). Filters are template, room, zone (room area), and unique NPCs with no spawner. Room and NPC links open the inspectors.
 5. **Dialogs** - Dialog tree editor
 6. **Quests** - Quest editor (objectives, rewards, prerequisites)
 7. **Skills** - Skill/spell editor (multi-class, effects)
 8. **Scripts** - Lua script editor with syntax highlighting
 9. **Character Templates** - Archetype editor with modal item-template selection for starting gear
-10. **World Map** - Grid-based world visualization
-11. **World Health** - Cross-system diagnostics for broken entity references and suspicious content values, including character template starting item references
+10. **World Map** - Grid-based world visualization. Fit view uses the same axis as the tiles: smaller Y is north and sits toward the top, matching authored room coordinates, so a zone filter stays on the canvas. The Reachability layer colors rooms from `GET /api/world/reachability`: green when reachable from the start room, indigo for an instance template that is reachable, and red for an unreachable island. Hidden exits are dashed and one-way exits are dotted while that layer is on. Clicking an island frames those rooms and shows each reason on its own line. Room ids in a reason open the room inspector (`?id=&view=inspector`). Script ids open the script editor. Further layers sit beside Reachability and can be on together. The choice is stored in `localStorage` (`tales.creator.mapLayers.v1`). They read `GET /api/world/overlays`: level band (NPC level range in the room, or the zone when the room has none; color is the midpoint), aggressive enemies (`aggroOnSight` count), spawners (icon, respawn time on hover), players online (live; an admin sees names, a creator sees the count), quest targets (rooms a visit, kill, talk, or deliver objective names; the badge reads Q×N and the tooltip lists the quest ids), missing art (no background image), and live instance copies (count of `~` rooms for that template). Overlay badges stay about 12px on screen at any zoom. When the tile is too small for that row, the extra badges collapse into +N instead of shrinking. The tile geometry is unchanged.
+11. **World Health** - Content-health report (reachability, reveal scripts, impossible quests, bosses, pack rules, drift) plus cross-system diagnostics for broken entity references and suspicious content values, including character template starting item references
+12. **Players** - Admin only. Live characters (online, guest, zone, in combat; optional older rows), a side drawer, and confirmed ops: teleport (room picker), give item (template picker), take item (that character's inventory), end combat, quest complete/reset/abandon, and re-grant starter kit. Instance copies and cleanup sit on the same page. Creators do not see this page.
+13. **Audit log** - Filterable creator and ops history, before/after JSON, and Undo for an admin
+14. **Drift** - Operate page at `/creator/drift`. Lists entities from `GET /api/health/drift` (added, changed, removed) and shows each changed field's before and after value. Export YAML downloads one entity from `GET /api/health/drift/export`. Export all downloads the current entities as one concatenated YAML file and skips removed rows. Health links here.
+
+### Live Ops And Audit
+- `ADMIN_ENV_LABEL` (optional `ADMIN_ENV_HOST`) feeds `GET /api/server-info`. A non-empty label shows a red `LABEL · host` badge in the top bar. Local servers leave the label empty.
+- `defaultTheme` on that same response is the ruleset key `ui.default_theme` (`dark-fantasy`, `clean-hud`, or `gilded`). The engine default is `dark-fantasy`. A content pack sets it in `config/ruleset.yaml`; import records that pack and the server merges the file at startup. The play setting `auto` uses it. Settings still offers Dark Fantasy, Clean HUD, and Gilded Frame, and an explicit pick wins. Gilded Frame styles live in `public/mud-client/public/themes/gilded/`. Dialog, the quest log, the shop, notices, the combat stage, and room entity cards add that skin in `themes/gilded/w3-screens.css`. Prices stay one gold integer, drawn in the gold coin colour. Layout, timings, and the other themes stay as they were.
+- Live ops and live reads run on the game command loop through `Game.Call`. The HTTP handler does not edit an online character behind that loop.
+- Every op body must include `confirm: true`. The Players page and `OpsButtons` open the shared confirm dialog before the request. A success toast offers Undo only when the audit row is undoable.
+- `OpsButtons` modes are `character` (end combat, re-grant starter kit), `quest` (complete quest, abandon, reset quest, mark one step done, reset one step), `npc` (heal, respawn, despawn, end combat), and `room` (teleport here, clean up one instance copy). The NPC inspector embeds the npc mode. The room inspector embeds the room mode. The component renders only when the signed-in user is an admin. Room teleport does not pass `force`.
+- Teleport moves online and offline characters through `RelocateCharacter`. A fight blocks the move unless `force` aborts it first. Undo teleports back when the character is still in the destination and not in a new fight.
+- Give and take follow unique-item rules and tell an online player. Undo of a give removes the added pieces. Undo of a take puts those pieces back.
+- `end-combat` aborts the fight: no rewards, penalties, or healing. It is not undoable. `instance-cleanup` relocates players in a chosen copy, or deletes only empty copies when `allEmpty` is set. It does not abort a fight in the copy and is not undoable.
+- `quest-step` `op=complete` with `objectiveId` advances that objective and does not grant rewards. Without `objectiveId` it completes the quest and grants rewards. Undo restores the previous progress row and does not remove XP, gold, or items already granted.
+- `regrant-starter-kit` adds missing class-kit or character-template starter pieces. It does not replace equipped gear. A class with no starter list is a skipped, non-undoable success.
+- NPC heal restores full HP. Respawn creates or revives an instance only when it is not already alive. Despawn refuses an NPC who is in combat. A persisted unique is marked dead rather than deleted as content.
+- Audit undo of a creator update or delete restores the stored before JSON, or recreates a deleted row. It returns 409 when the entity changed since the audited write.
 
 ### Room Editor Features
 - **Exit management** - Add/edit/delete exits, toggle hidden
@@ -2413,15 +2517,18 @@ Creator editors share backend validation rules from `pkg/service/validation`:
 - **Background & mood** - Visual settings
 - **Coordinates** - Grid positioning (X, Y, Z)
 - **Bind point** - Allow `/bind` for respawn
+- **Inspector** - Inspector tab on the room detail. It calls `GET /api/rooms/:id/inspect` for exits in and out (a hidden exit lists the script that reveals it, or says none does), resident and spawn-room NPCs, spawners (template, max, respawn time), items, the on-enter script, actions, and quests with a visit objective for this room. Reachability is the world-index result from the start room. An instance-copy id resolves to its template. Live characters in this room or a copy of it come from `GET /api/live/characters?all=1` and are admin only. Live NPC instances come from `GET /api/live/npcs`. Instance copies come from `GET /api/live/instances`. Admin ops are teleport into this room or a chosen copy, and instance cleanup for that copy, each behind the shared confirm dialog and the audit toast. Creators see the live NPC and copy rows and a note that those ops are admin only. Inbound references stay on the editor's Referenced by panel under the form. A spawner id opens `/creator/spawners?id=`. `?view=inspector` opens this tab.
 
 ### NPC Editor Features
 - **Template vs. Unique** - Toggle `IsTemplate` flag
 - **Basic info** - Name, description, race, class, level
-- **Enemy trait** - Combat stats, difficulty, loot, AI behavior
+- **Enemy trait** - Grouped into combat stats, behaviour, loot and rewards, and Lua hooks. Fields: creature type, combat style, difficulty, attack, defense, attack speed, XP, aggro radius, aggro on sight, call for help, flee threshold (shown as a percent), gold range, loot table, guaranteed item templates, max drops, and on-aggro, on-death, on-flee, and on-low-health scripts with the low-health line as a percent and resulting HP. Help text states the engine default when a field is unset. Loot tables, item templates, and scripts use `EntitySelectButton`.
+- **Content base vs effective stats** - Imported enemies store unscaled `enemyTrait.baseStats` (`maxHitPoints`, `attackPower`, `defense`) beside the effective stats written to `maxHitPoints`, `attackPower`, and `defense`. The enemy tab labels which values the inputs edit. Effective stats are read-only and named with the tier. A named override replaces that tier's factors. An unknown tier shows `unknown difficulty tier — no scaling applied` and keeps the base numbers. Editor-created enemies have no content base; their inputs edit the stored combat stats. Saving recomputes effective stats on the server when a content base is present, and a wounded NPC keeps its current HP. YAML export writes the content base when it is present so a round trip does not scale twice.
 - **Merchant trait** - Inventory, pricing, restock, accepted items
 - **Dialog assignment** - Main dialog, idle dialog
 - **Behavior** - State, spawn room, wander radius, patrol path, idle chatter dialog, idle chatter timeout, respawn time
 - **Resident placement** - Assign `CurrentRoomID` for auto-spawn
+- **Inspector** - Edit / Inspector on the NPC detail. Inspector calls `GET /api/npcs/:id/inspect` for the template summary: type, level, difficulty, content base versus effective stats (same multipliers as `GET /api/balance/enemy-scaling`; a named override replaces the tier; an unknown tier keeps the base), loot-table chances, dialog and idle-dialog links, on-aggro / on-death / on-flee / on-low-health scripts, spawners (room, respawn time, max), and quests with a kill, talk, or deliver objective for this NPC. The loot table id opens `/creator/loot-tables?id=`. A spawner id opens `/creator/spawners?id=`. A running instance id resolves to its template. Live instances come from `GET /api/live/npcs?templateId=` (room, HP, opponent names, dead-until). Admin ops on that list are heal, respawn, despawn, and end combat, each behind the shared confirm dialog and the audit toast. Creators see the live rows and a note that ops are admin only. Inbound references stay on the editor's Referenced by panel under the form. `?view=inspector` opens this tab for the `?id=` selection.
 
 ### Quest Editor Features
 - **Objectives** - Add kill/collect/deliver/visit/talk/custom objectives
@@ -2429,10 +2536,11 @@ Creator editors share backend validation rules from `pkg/service/validation`:
 - **Rewards** - XP, gold, item grants
 - **Prerequisites** - Required quests, level requirement
 - **Dialog integration** - Accept/progress/complete text
-- **Repeatable** - Daily/recurring quests
+- **Repeatable** - Daily/recurring quests. `repeatReset: daily` waits until `quests.daily_reset_hour_utc` (default 4). `repeatReset: cooldown` waits `repeatCooldownSeconds`. The quest log, dialog offer, and `quests` command say "Available again in 5h 12m" until then. Client payloads carry `repeats`, `repeatReset`, and `nextAvailableAt`. Plain `repeatable: true` is unchanged. The next-step guide skips a quest with a reset while any normal quest is still open.
 - **OnComplete script** - Lua script on quest completion
 - **Validation panel** - Flags missing source references, objective targets, duplicate IDs, invalid rewards, missing scripts, self-prerequisites, and unresolved entity IDs before save
 - **Player flow preview** - Summarizes offer source, objective lines, ready turn-in target, and rewards for quick testing while authoring
+- **Quest debugger** - `GET /api/quests/:id/debug` and `/creator/quests/debug?id=`. The id comes from the URL on load and whenever that query changes, including Debug quest and Health links. Shows the step chain, where each objective can be satisfied, whether that place is reachable, and a green, amber, or red verdict using the same completability check as content health. Also shows prerequisites, follow-on quests, the offer and turn-in, rewards, and characters currently on the quest. Each character row includes the open `objectiveId`. Reset quest step is admin-only. It confirms, then POSTs `/api/ops/quest-step` with `op=reset` for that objective. The toast shows the summary and can undo.
 
 ### Skill Editor Features
 - **Multi-class assignment** - Skills can belong to multiple classes
@@ -2450,6 +2558,28 @@ Creator editors share backend validation rules from `pkg/service/validation`:
 ---
 
 ## Recent Features & Best Practices
+
+### Gilded Frame on inventory and character screens
+
+When `body[data-theme="gilded"]` is set, the play client restyles inventory, equipment, the character sheet, item detail (quality-coloured name, green/red compare deltas, UNIQUE mark), Need/Greed, party, recipes, and the sign-in / character-creation frames. Layout, controls, and test ids stay put. The sign-in card keeps its size. Play as guest is a leather plaque with gold text. Continue with X and Continue with Google are a separate bronze plaque. Quality colours follow the theme variables (`magic` green, `rare` blue, `legendary` purple, `mythic` and `unique` orange). Empty equipment slots draw line silhouettes, and a stack count sits in the slot corner. Other themes keep their previous colours and do not show that count. Stylesheet: `public/mud-client/public/themes/gilded/w2-screens.css`.
+
+### Additive structured messages (protocol 1)
+
+- `examine`/`inspect` retains its prose and adds `examineResult` for items:
+  `name`, `slot`, `quality`, `stats`, `value`, `description`, `detail`, and
+  `effects[]` strings from `items.FormatEffect`, including script fallbacks.
+  The play client consumes `examineResult` for the RoomTextOverlay item card
+  (effects shown as explicit lines); prose-only examine (NPC / old server)
+  still uses the dump parser.
+- `characterSelected.guest: true` identifies guests; account sessions omit it.
+- Character selection/reconnect in a live fight sends one `combatStatus` with
+  the full roster, round, actor, deadline, target, and player queue/cooldowns.
+  It does not advance or restart combat. Stale `inCombat` flags produce no snapshot.
+- Optional socket `hello` negotiates protocol 1 and server build identity with
+  `ok`, `upgrade-recommended`, or `too-old`. It never executes a game command.
+- The web battle store restores the snapshot immediately. New fields use
+  `omitempty`; clients must ignore unknown fields and types. Protocol notes:
+  `docs/structured-messages.md`.
 
 ### Per-Character Hidden Exit Reveals
 **Feature**: Hidden exits can be revealed individually per character via scripting.
@@ -2700,7 +2830,7 @@ Area-local authored coordinates and compass exits define geography. Compact zone
   "layers": [{"id": "overworld", "name": "Overworld", "kind": "overworld"}],
   "places": [{"id": "R0102", "name": "Wildflower Field", "x": 2, "y": -1, "layer": "overworld", "biome": "meadow", "terrain": "grassland", "mapRole": "surface", "kind": "wild", "discovered": true, "canTravel": true}],
   "paths": [{"from": "R0101", "to": "R0102", "dir": "north", "kind": "trail", "layer": "overworld"}],
-  "regions": [{"id": "Z01_sample_meadow:overworld", "name": "Sample Meadow", "hull": [[1, -2], [3, -2], [3, 0]], "biome": "meadow"}],
+  "regions": [{"id": "Z01_meadows_forest_path:overworld", "name": "Meadows Forest Path", "hull": [[1, -2], [3, -2], [3, 0]], "biome": "meadow"}],
   "landscape": [{"x": 2, "y": -1, "terrain": "grassland"}]
 }
 ```
@@ -2710,13 +2840,14 @@ Fog neighbors are places with `discovered: false`, empty `name`, and `kind: "unc
 - Map widget (player-facing name; same `minimap` widget slot / atlas protocol) receives the atlas over WebSocket on enter, and can also fetch `GET /api/characters/:id/map`
 - Action-bar **Map** chrome / Expand always opens a real fullscreen Map overlay (dimmed play surface, Esc/X close) via `MapOverviewOverlay` portaled to `document.body` — Inventory-style centered panel (`#map-overview-overlay` / `.map-panel`), not clipped to the Map widget and not Materialize `.modal`
 - Area names: drawn over landscape regions (gold/cream + dark stroke, font scales with zoom); uses `region.name` / `place.areaName` only — never invents labels. Room-name LOD unchanged: mid = current + adjacent; zoomed in = more room names (collision-aware). Compass/vertical exit words are never painted (exit ticks only)
-- Cartographer overlay fills ~80% of the viewport on desktop (side intel rail). On phone (≤768px) it is full-bleed / safe-area; intel is a bottom sheet (peek summary + Travel, expand for exits/residents). Tap selects; Travel is a primary button on select (no double-tap required; Inspect remains optional). Pinch-zoom and pan keep scale. Compact Map tab selection shows Travel immediately (Inspect optional); the inner Map title / Open Map chrome is removed so the MAP tab is the only header. During Travel the camera smoothly follows the player; when Travel completes in the Cartographer overlay, the overlay fades out and closes (compact Map tab stays open). Active quests in the Quest Log group by area with collapse/expand (current area expanded). Equipment paper-doll uses larger slots and a denser column layout. BattleStage shows WoW-style buff/debuff icon rows with remaining rounds from combatant `statusEffects`.
-- Exterior elevations and upstairs interiors stay on Overworld; dungeons, crypts, cellars, and sewers use Lower. Configured zone centers in `map_layout.json` place areas on the continent (demo worlds can override). Interior selection retains the actual room ID.
+- Cartographer overlay fills ~80% of the viewport on desktop (side intel rail). On phone (≤768px) it is full-bleed / safe-area; intel is a bottom sheet (peek summary + Travel, expand for exits/residents). Tap selects; Travel is a primary button on select (no double-tap required; Inspect remains optional). Pinch-zoom and pan keep scale. Compact Map tab selection shows Travel immediately (Inspect optional); the inner Map title / Open Map chrome is removed so the MAP tab is the only header. During Travel the camera smoothly follows the player; when Travel completes in the Cartographer overlay, the overlay fades out and closes (compact Map tab stays open). Active quests in the Quest Log group by area with collapse/expand (current area expanded). Equipment paper-doll uses larger slots and a denser column layout. BattleStage shows gilded fantasy frame buff/debuff icon rows with remaining rounds from combatant `statusEffects`.
+- Exterior elevations and upstairs interiors stay on Overworld; dungeons, crypts, cellars, and sewers use Lower. Interior selection retains the actual room ID.
 - Title stays **Map**. Layer tabs (Overworld/Lower/Upper) only when `atlas.layers` has more than one entry. Compact optional widget opens fullscreen; Map chrome pin is primary
 - Compact minimap and fullscreen MapOverviewOverlay share `atlasRenderer.paintAtlas`, surface grouping, and the cached blended continent. Lower has a dedicated torch-lit rock/floor/corridor scene; Upper retains terrain tiles. Fog hides uncharted art; one gold marker follows the current room or its exterior anchor.
 - The widget auto-fits discovered places into its panel and keeps that fit (canvas is out of flow so it cannot resize the widget)
 - Layer tabs, pan, wheel zoom, click-to-travel along discovered paths
 - Desktop/mobile action bars (Option C): room-only dirs + room actions + Shop when a merchant is present; fixed INV / MAP / SAY chrome; **Recipes** seeded by default for crafting discoverability; optional Look/Rest/… pins via ⋯; layout revision migrates legacy Look/pin clutter and seeds Recipes onto rev-2 bars
+- Pickup is one shared panel (`PickupPanel.svelte`, logic in `pickupPanel.js`), opened from the desktop Pickup button and from the phone action-bar button and room hand button. Rows use item art, normal-case names, rarity colors (unique is gold), a ×N stack, and a `type · effect` hint. Currency is `type: currency` or a `currency` tag; a coin name matches only when the row has no type. Pick up all is a separate gold footer button when more than one item is on the ground. Keys 1–9, Enter, and Esc apply while the panel is the top overlay and a text field is not focused. The list scrolls; the header and footer stay put. On screens 600px and under the panel is a full-width bottom sheet. It closes itself when nothing pickable remains. Room item rows keep `id`, `name`, `noPickup`, and `copyOnPickup`, and add optional `type`, `subType`, `quality`, `unique`, `quantity`, and `effect` (one `FormatEffect` line, or `Heals N HP`). Play cache tag `curve1`.
 - Inventory chrome opens a popup overlay by default; preference can switch to on-screen widget / mobile sheet
 - Room action/system reaction toasts render large and centered on the room hero art (not the command log)
 - Same JSON is the contract for a future mobile renderer
@@ -2729,7 +2860,7 @@ Fog neighbors are places with `discovered: false`, empty `name`, and `kind: "unc
 - `public/mud-client/src/game/widgets/continentRenderer.js` / `coastline.js` / `mapArt.js` / `surfaceAtlas.js` — cached zoom scenes, organic shores, room art, town/interior grouping, roads/bridges
 - `public/mud-client/src/game/widgets/undergroundRenderer.js` — rock-sided corridors, themed floors, torches, stairs
 - `public/mud-client/public/map-tiles/terrain-sheet.png` — shared 48px terrain and transparent building sprites
-- `public/mud-client/src/game/hudPrefs.js` — Option C action-bar chrome/pins + hotbar helpers
+- `public/mud-client/src/game/hudPrefs.js` — Option C action-bar chrome/pins and hotbar helpers. Kit skills come from `GET /api/classes` (`?v=classkit1`)
 
 ---
 
@@ -2826,10 +2957,10 @@ type GuestService interface {
 2. Server checks `ServerSettings.GuestsAllowed` and `MaxGuestAccounts`
 3. IP rate limit checked (10 per hour per IP)
 4. Random character created from system template presets with full starter items. Signed-in create uses the same equip path: each `StartingItems` name becomes a new item copy (`IsTemplate` false) in the listed slot. Presets take those names from the class catalog `starting_items`. An id that is not on the roster falls back to the stored template's names. Existing characters are not updated.
-5. Character spawned in `ServerSettings.StartRoomID` when the pack sets it. If that field is empty, the engine uses room `R0001` only when that room exists. Auto quests whose area matches the start room are granted
-5a. Entering a room grants auto-source quests for that room's area
+5. Character spawned in `ServerSettings.StartRoomID` (default `R0001` if that room exists); auto quests for that zone are granted
+5a. Entering a room grants auto-source quests for that room's area (Z01 meadows: QST010*) so they fire after leaving Z00
 5b. Lua `tales.game.giveItem` notifies collect-quest progress (foraging, script rewards)
-5c. Quest YAML `onAcceptScriptId` runs after a dialog accept
+5c. Quest YAML `onAcceptScriptId` runs after a dialog accept (Z01 Wren reveals the creek burrow)
 6. Character `MaxLevelCap` set to 5
 7. User created with `IsGuest=true`, `GuestExpiresAt=now+30min`
 8. HMAC-SHA256 token signed with `GUEST_SECRET` env var
@@ -2843,7 +2974,7 @@ type GuestService interface {
 // In ServerSettings:
 GuestsAllowed    bool  // Enable/disable guest mode (default: true)
 MaxGuestAccounts int   // Max concurrent guests (default: 20, 0 = unlimited)
-StartRoomID      string // New/guest spawn room (empty until a pack sets it; R0001 is only a fallback when that room exists)
+StartRoomID      string // New/guest spawn room (default "R0001")
 ```
 
 ### User Entity Guest Fields
@@ -2871,11 +3002,49 @@ The leveling system (`CheckLevelUp`, `ApplyLevelUp`) respects `MaxLevelCap` auto
 - `api/guest.js` — `createGuestSession()` API client
 
 ### Authentication
-- Guest HMAC tokens are validated before Auth0 JWTs in `AuthMiddleware`
+- Classic public device login: `POST /api/device/start` (`client`, `client_version`, `proto: 1`) and `POST /api/device/poll` (`device_code`) share `pkg/devicecode` with SSH. A separate hashed 256-bit poll secret, app client metadata, interval backoff, IP/global start limits and IP/device poll limits protect the flow. Explicit authenticated `/activate` confirmation issues one signed 30-minute account JWT accepted by character APIs and `/ws`; guests cannot confirm. `pkg/authsession` checks issuer, audience, mandatory expiry, bans and the existing session version, using the `SESSION_SECRET` / persistent session-key resolver. Door remains on its existing login. See `docs/device-login.md`.
+- Guest HMAC tokens are validated before Auth0 JWTs in `AuthMiddleware`. The token is accepted only when the loaded user is a guest. An Auth0 token must include the configured audience and issuer.
 - Token claims: `sub` (RefID), `uid` (user entity ID), `exp` (30min), `guest: true`
 - If `GUEST_SECRET` is not set, a random key is generated at startup
 - Local username/password sessions (Argon2id) are the fork default: `config/gamemode.yaml` sets `auth: local`, or set `AUTH_MODE=local`. Set `AUTH_MODE=auth0` to use Auth0 instead. API responses omit the password hash. Login attempts are limited per client address. `X-Forwarded-For` is trusted only from loopback unless `trusted_proxies` or `TRUSTED_PROXIES` says otherwise.
 - `presentation: door_tui` serves `public/door` and `GET /api/door/config` (title, subtitle, token key). Classic mode does not mount `/door`. The page paints live rooms, exits, actions, NPCs, resources, and combat status, plus the last few command replies. Keys and typed lines become engine commands. A world pack may add `keymap.yaml` (per room, per area, and a combat overlay) and `character_paths.yaml`. `d` stays down. With no character selected, the page asks for a name, then a numbered path, then sex. An existing name is selected. A new character uses the pack path when that file is present, and otherwise a numbered system template. Reconnect runs the new-day pass without another select.
+- `presentation: door_tui` serves `public/door` and `GET /api/door/config` (title, subtitle, token key). Classic mode does not mount `/door`. The page paints live rooms, exits, actions, NPCs, resource labels, and combat status. The header uses live combat hit points and shows experience beside gold. The fight log stays until any key after the fight ends, including Enter, and a bare extra attack on that screen is not sent. The status line stays pinned above the log. The stats key paints hit points, gold, worn gear, and a gems count. A compass letter uses an open exit before a menu bind, and open east and west exits are listed. The index heading uses the configured title. A one-shot reply stays on the screen that produced it. A merchant room shows a numbered catalog, six rows at a time. `buy` and `sell` accept that number or a name. Keys and typed lines become engine commands. `:` starts a command line in the browser before later letters can hit hotkeys. A pack key whose command is `logout` tells the page to drop the session and return to the sign-in form. A world pack may add `keymap.yaml` (per room, per area, and a combat overlay) and `character_paths.yaml`. `d` stays down. With no character selected, the page asks for a name, then a numbered path, then sex, and the movement legend stays off that prompt. An existing name is selected. A new character uses the pack path when that file is present, and otherwise a numbered system template. The path name is stored on the `path` flag and the stats screen shows it. Reconnect runs the new-day pass without another select.
+
+---
+
+## SSH Access
+
+SSH is off by default. `ssh.enabled` starts one listener in the current process. Classic Auth0 and door local-auth are separate processes and separate ports. Setup, limits, and player commands are in `docs/ssh-access.md`.
+
+### What a session can do
+
+- Guest SSH reuses guest creation. The account stays `IsGuest` with role `player` and no creator or admin role. It cannot confirm or deny a device code, link a key, open a creator or admin route, or change account fields (`PUT /api/user` is 403). The same connection stays that guest. The device lobby does not enter the game before confirm.
+- A linked public key enters as that account. Creators and admins use the same check as everyone else.
+- Keyboard-interactive reaches a lobby only. The game attaches after the web confirm.
+- `ssh.max_session: 0` leaves account sessions uncapped. Guest sessions use `ssh.guest.max_session` (default 30 minutes). Idle applies to play on both.
+- Output is queued per session (128 messages). A full queue drops that session instead of blocking the game loop.
+- Door frames sanitize player and creator text. OSC, DCS, C1, and bidi controls are dropped. Pack screen CSI is kept on the art path. SGR color in a frame is kept.
+- Deleting a linked key, or banning the account, closes that account's live SSH sessions in this process.
+
+### Stored keys
+
+`ssh_keys` is a SQLite JSON row (`id`, `data`) plus a unique index on `json_extract(data, '$.fingerprint')`. The row stores the account ref, fingerprint, key type, authorized_keys line, label, timestamps, and `created_via` (`device` only). A web paste is rejected and does not occupy that index. The local activate page lists and revokes linked keys and has no paste field. HTTP list responses omit the key blob and the last-used address. The owner still receives the full fingerprint. Device lookup returns only the shortened fingerprint.
+
+Accepted public keys: ed25519, sk-ed25519, ecdsa-sha2-nistp256/384/521, and ssh-rsa. `ssh-dss`, private-key blobs, and newlines are rejected. Signature algorithms stay the modern set from the SSH library (RSA signatures are rsa-sha2 only).
+
+### Play client
+
+Classic `/activate` is a standalone Auth0 page for SSH and app codes, with “Connect this terminal/app” wording and explicit Confirm and Deny actions. Legacy `/play/?activate=<code>` links go there. The code is kept in `sessionStorage` under `talesmud_ssh_activate` and removed from the address bar before Auth0 redirects. Guests cannot confirm and do not get the SSH keys menu. The account menu item is on the desktop chip, the phone header, and the onboarding menu.
+
+### Lua
+
+`tales.users.isGuest(id)` is false when the user is missing. `ctx.user.isGuest` is the same flag. `tales.characters.top` skips guest rows unless `guests.persistent_effects` is on. A row with no user id stays on the board.
+
+---
+
+## Quiet Dark appearance
+
+Quiet Dark: optional minimal dark client theme, opt-in via `ui.default_theme` or Settings. `dark-fantasy` stays the engine default. Players can also pick it in Settings, or follow the server with Auto.
 
 ---
 

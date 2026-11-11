@@ -340,9 +340,12 @@ func NewCreateCharacterMessage(user string) MessageResponse {
 
 // DialogOption represents a player choice in a dialog
 type DialogOption struct {
-	Index int    `json:"index"` // 1-based index for player input
-	Text  string `json:"text"`  // The option text to display
-	Kind  string `json:"kind,omitempty"`
+	Index           int    `json:"index"` // 1-based index for player input
+	Text            string `json:"text"`  // The option text to display
+	Kind            string `json:"kind,omitempty"`
+	Repeats         bool   `json:"repeats,omitempty"`
+	RepeatReset     string `json:"repeatReset,omitempty"`
+	NextAvailableAt string `json:"nextAvailableAt,omitempty"`
 }
 
 // DialogMessage represents a dialog message with NPC text and player options
@@ -554,22 +557,25 @@ type QuestReward struct {
 
 // QuestLogEntry represents a quest in the quest log
 type QuestLogEntry struct {
-	QuestID        string                   `json:"questId"`
-	QuestName      string                   `json:"questName"`
-	Description    string                   `json:"description,omitempty"`
-	Category       string                   `json:"category,omitempty"`
-	Area           string                   `json:"area,omitempty"`
-	Level          int32                    `json:"level,omitempty"`
-	Status         string                   `json:"status"`
-	ReadyToTurnIn  bool                     `json:"readyToTurnIn,omitempty"`
-	TurnInAnywhere bool                     `json:"turnInAnywhere,omitempty"`
-	TurnInNpcID    string                   `json:"turnInNpcId,omitempty"`
-	TurnInNpcName  string                   `json:"turnInNpcName,omitempty"`
-	TurnInRoomID   string                   `json:"turnInRoomId,omitempty"`
-	Objectives     []QuestObjectiveProgress `json:"objectives"`
-	Rewards        *QuestReward             `json:"rewards,omitempty"`
-	AcceptedAt     string                   `json:"acceptedAt,omitempty"`
-	CompletedAt    string                   `json:"completedAt,omitempty"`
+	QuestID         string                   `json:"questId"`
+	QuestName       string                   `json:"questName"`
+	Description     string                   `json:"description,omitempty"`
+	Category        string                   `json:"category,omitempty"`
+	Area            string                   `json:"area,omitempty"`
+	Level           int32                    `json:"level,omitempty"`
+	Status          string                   `json:"status"`
+	ReadyToTurnIn   bool                     `json:"readyToTurnIn,omitempty"`
+	TurnInAnywhere  bool                     `json:"turnInAnywhere,omitempty"`
+	TurnInNpcID     string                   `json:"turnInNpcId,omitempty"`
+	TurnInNpcName   string                   `json:"turnInNpcName,omitempty"`
+	TurnInRoomID    string                   `json:"turnInRoomId,omitempty"`
+	Objectives      []QuestObjectiveProgress `json:"objectives"`
+	Rewards         *QuestReward             `json:"rewards,omitempty"`
+	AcceptedAt      string                   `json:"acceptedAt,omitempty"`
+	CompletedAt     string                   `json:"completedAt,omitempty"`
+	Repeats         bool                     `json:"repeats,omitempty"`
+	RepeatReset     string                   `json:"repeatReset,omitempty"`
+	NextAvailableAt string                   `json:"nextAvailableAt,omitempty"`
 }
 
 // QuestLogMessage sends the full quest log to the client
@@ -591,6 +597,33 @@ func NewQuestUpdateMessage(userID, questID, questName, status string, objectives
 		QuestID:    questID,
 		Status:     status,
 		Objectives: objectives,
+	}
+}
+
+// GuideHintMessage is the single next-step chip. Empty Text clears it.
+type GuideHintMessage struct {
+	MessageResponse
+	Text      string `json:"text"`
+	QuestName string `json:"questName,omitempty"`
+	Step      string `json:"step,omitempty"`
+	Command   string `json:"command,omitempty"`
+	Label     string `json:"label,omitempty"`
+}
+
+// NewGuideHintMessage creates a guideHint for one user. Empty text hides the chip.
+func NewGuideHintMessage(userID, text, questName, step, command, label string) *GuideHintMessage {
+	return &GuideHintMessage{
+		MessageResponse: MessageResponse{
+			Audience:   MessageAudienceOrigin,
+			AudienceID: userID,
+			Type:       MessageTypeGuideHint,
+			Message:    text,
+		},
+		Text:      text,
+		QuestName: questName,
+		Step:      step,
+		Command:   command,
+		Label:     label,
 	}
 }
 
@@ -1052,6 +1085,42 @@ func NewPartyInviteMessage(userID string, pending bool, inviterName, partyID str
 	}
 	if pending {
 		msg.ExpiresAt = time.Now().Add(def.PartyInviteTTL).Unix()
+	}
+	return msg
+}
+
+// NeedGreedMessage drives the Need / Greed / Pass loot popup.
+type NeedGreedMessage struct {
+	MessageResponse
+	Pending   bool   `json:"pending"`
+	RoundID   string `json:"roundId,omitempty"`
+	ItemName  string `json:"itemName,omitempty"`
+	Quality   string `json:"quality,omitempty"`
+	Quantity  int32  `json:"quantity,omitempty"`
+	ExpiresAt int64  `json:"expiresAt,omitempty"` // unix seconds; 0 when cleared
+}
+
+// NewNeedGreedMessage creates a pending (or cleared) Need/Greed payload.
+func NewNeedGreedMessage(userID string, pending bool, roundID, itemName, quality string, quantity int32, expires time.Time) *NeedGreedMessage {
+	msg := &NeedGreedMessage{
+		MessageResponse: MessageResponse{
+			Audience:   MessageAudienceOrigin,
+			AudienceID: userID,
+			Type:       MessageTypeNeedGreed,
+			Message:    "",
+		},
+		Pending:  pending,
+		RoundID:  roundID,
+		ItemName: itemName,
+		Quality:  quality,
+		Quantity: quantity,
+	}
+	if pending {
+		if !expires.IsZero() {
+			msg.ExpiresAt = expires.Unix()
+		} else {
+			msg.ExpiresAt = time.Now().Add(30 * time.Second).Unix()
+		}
 	}
 	return msg
 }

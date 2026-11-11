@@ -1,14 +1,14 @@
 import { writable } from 'svelte/store';
 
-const MOBILE_BREAKPOINT = 768;
+export const MOBILE_QUERY = '(max-width: 768px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape)';
 
 function createMobileStore() {
   const isMobile = writable(false);
   const activeTab = writable('room'); // 'room' | 'console'
-  const openSheet = writable(null);   // null | 'character' | 'inventory' | 'equipment'
+  const openSheet = writable(null);   // null | 'character' | 'skills' | 'inventory' | 'equipment' | 'quests'
 
   if (typeof window !== 'undefined') {
-    const mql = window.matchMedia(`(max-width: ${MOBILE_BREAKPOINT}px)`);
+    const mql = window.matchMedia(MOBILE_QUERY);
     isMobile.set(mql.matches);
     mql.addEventListener('change', (e) => {
       isMobile.set(e.matches);

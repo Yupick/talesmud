@@ -39,7 +39,7 @@ type Game struct {
 	// Quest tracker for quest progress
 	QuestTracker *QuestTracker
 
-	// Private cellar copies (WoW-style, not a raid platform)
+	// Private cellar copies (gilded fantasy frame, not a raid platform)
 	RoomInstances *roomInstanceAdapter
 
 	// Resources is the refilling balance store. Nil until the process attaches one.
@@ -139,6 +139,9 @@ type Game struct {
 	npcDialogueProvider def.NPCDialogueProviderFunc
 	npcDialogueCooldown map[string]time.Time
 	npcDialogueSem      chan struct{}
+
+	// needGreed holds the open Party Need/Greed loot round and the queue behind it.
+	needGreed needGreedBook
 
 	//world *World
 }

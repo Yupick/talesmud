@@ -1,6 +1,9 @@
 <script>
   import { portraitBustSrc, onPortraitBustError } from '../portraitSrc.js';
   import { relationSummary } from '../relationFeedback.js';
+  import { portal } from '../portal.js';
+  import { optionLabel } from '../questRepeat.js';
+  import RepeatMark from './RepeatMark.svelte';
 
   export let npcName = "";
   export let npcText = "";
@@ -29,6 +32,10 @@
     }
     return opts;
   })();
+
+  $: leaveOption = displayOptions.find((option) =>
+    /\b(go|leave|goodbye|farewell|bye)\b/i.test(String(option?.text || ''))
+  ) || null;
 
   function handleOption(option) {
     if (option?.index === TRADE_TOKEN || /^(trade|shop)\b/i.test(String(option?.text || "").trim())) {
@@ -59,20 +66,57 @@
 
 <style>
   .dialog-overlay {
-    position: absolute;
-    top: 0;
-    left: 0;
-    right: 0;
-    bottom: 0;
-    background: rgba(0, 0, 0, 0.85);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
-    z-index: 100;
+    position: fixed;
+    inset: 0;
+    z-index: var(--layer-dialog);
+    background: rgba(0, 0, 0, 0.72);
     display: flex;
-    flex-direction: column;
-    padding: 1.5em;
+    align-items: flex-end;
+    justify-content: center;
+    padding: 0;
+    padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
+    box-sizing: border-box;
     animation: fadeIn 0.3s ease-out;
+    overflow: hidden;
+  }
+
+  .dialog-sheet {
+    width: 100%;
+    max-height: min(88dvh, calc(100dvh - env(safe-area-inset-top, 0px) - 0.5rem));
     overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    box-sizing: border-box;
+    padding: 0.85rem 1rem max(1rem, env(safe-area-inset-bottom, 0px));
+    background: rgba(8, 10, 14, 0.97);
+    border: 1px solid rgba(255, 255, 255, 0.14);
+    border-bottom: none;
+    border-radius: 16px 16px 0 0;
+    box-shadow: 0 -16px 40px rgba(0, 0, 0, 0.5);
+  }
+
+  .dialog-sheet-bar {
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    min-height: 44px;
+    margin: -0.15rem 0 0.35rem;
+    background: rgba(8, 10, 14, 0.97);
+  }
+
+  .dialog-dismiss {
+    appearance: none;
+    min-width: 44px;
+    min-height: 44px;
+    border: none;
+    border-radius: 8px;
+    background: transparent;
+    color: #cbd5e1;
+    font-size: 1.6rem;
+    line-height: 1;
+    cursor: pointer;
   }
 
   @keyframes fadeIn {
@@ -254,8 +298,77 @@
     background: rgba(245, 158, 11, 0.28);
   }
 
+  .option-body {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 0.2rem;
+  }
+
   .option-text {
     flex: 1;
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+
+  @media screen and (min-width: 769px) {
+    .dialog-overlay {
+      align-items: center;
+      padding:
+        max(1.25rem, env(safe-area-inset-top, 0px))
+        max(1.25rem, env(safe-area-inset-right, 0px))
+        max(1.25rem, env(safe-area-inset-bottom, 0px))
+        max(1.25rem, env(safe-area-inset-left, 0px));
+      overflow: hidden;
+    }
+
+    .dialog-sheet {
+      width: min(720px, 100%);
+      max-height: min(86dvh, 820px);
+      min-height: 0;
+      overflow-y: auto;
+      border-radius: 12px;
+      border-bottom: 1px solid rgba(255, 255, 255, 0.14);
+      background: rgba(0, 0, 0, 0.9);
+      backdrop-filter: blur(8px);
+      -webkit-backdrop-filter: blur(8px);
+    }
+
+    .dialog-sheet-bar {
+      background: transparent;
+    }
+  }
+
+  /* Phone landscape is wider than 768px and shorter than the centered panel. */
+  @media screen and (max-height: 500px) {
+    .dialog-overlay {
+      align-items: flex-end;
+      padding: max(0.35rem, env(safe-area-inset-top, 0px)) 0 0;
+      overflow: hidden;
+    }
+
+    .dialog-sheet {
+      width: 100%;
+      max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top, 0px) - 0.35rem));
+      min-height: 0;
+      overflow-y: auto;
+      border-radius: 16px 16px 0 0;
+    }
+
+    .npc-portrait-slot {
+      width: 72px;
+    }
+
+    .dialog-text {
+      font-size: 0.95em;
+      padding: 0.6em;
+    }
+
+    .dialog-option-btn {
+      padding: 0.55em 0.75em;
+    }
   }
 
   .dialog-free-text {
@@ -292,8 +405,9 @@
   }
 
   @media screen and (max-width: 600px) {
-    .dialog-overlay {
-      padding: 1em;
+    .dialog-sheet {
+      padding-left: 0.85rem;
+      padding-right: 0.85rem;
     }
 
     .npc-portrait-slot {
@@ -316,9 +430,15 @@
   }
 </style>
 
-<div class="dialog-overlay">
+<div class="dialog-overlay" use:portal>
+  <div class="dialog-sheet gf-panel" role="dialog" aria-modal="true" aria-label={npcName || 'Conversation'}>
+  {#if leaveOption}
+    <div class="dialog-sheet-bar">
+      <button class="dialog-dismiss gf-close" type="button" aria-label="Close" on:click={() => handleOption(leaveOption)}>×</button>
+    </div>
+  {/if}
   <div class="dialog-header">
-    <div class="npc-portrait-slot {npcType}">
+    <div class="npc-portrait-slot gf-medallion {npcType}">
       <img
         class="npc-portrait"
         src={portraitBustSrc(npc)}
@@ -351,7 +471,10 @@
           on:click={() => handleOption(option)}
         >
           <span class="option-index">{isTradeOption(option) ? '★' : option.index}</span>
-          <span class="option-text">{option.text}</span>
+          <span class="option-body">
+            <span class="option-text">{optionLabel(option)}</span>
+            <RepeatMark repeats={option.repeats} repeatReset={option.repeatReset} nextAvailableAt={option.nextAvailableAt} />
+          </span>
         </button>
       {/each}
     </div>
@@ -369,4 +492,5 @@
       <button type="submit" disabled={!freeTextDraft.trim()}>Enviar</button>
     </form>
   {/if}
+  </div>
 </div>

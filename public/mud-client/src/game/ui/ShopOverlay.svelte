@@ -2,6 +2,7 @@
   import { onDestroy } from 'svelte';
   import { itemArtSrc, onItemArtError } from '../itemArtSrc.js';
   import { itemEffectLines } from '../itemEffects.js';
+  import { portal } from '../portal.js';
 
   export let store;
   export let sendMessage;
@@ -206,6 +207,27 @@
     }
   }
 
+  function slotQuality(quality) {
+    switch (String(quality || '').toLowerCase()) {
+      case 'poor':
+      case 'junk':
+        return 'poor';
+      case 'magic':
+      case 'uncommon':
+        return 'uncommon';
+      case 'rare':
+        return 'rare';
+      case 'legendary':
+      case 'epic':
+        return 'epic';
+      case 'mythic':
+      case 'unique':
+        return 'legendary';
+      default:
+        return 'common';
+    }
+  }
+
   function getQualityColor(quality) {
     switch (quality) {
       case 'magic': return '#22c55e';
@@ -367,27 +389,33 @@
 
 <style>
   .shop-overlay {
-    position: absolute;
+    position: fixed;
     inset: 0;
-    z-index: 120;
-    background: rgba(0, 0, 0, 0.82);
-    backdrop-filter: blur(6px);
+    z-index: var(--layer-shop);
+    background: rgba(0, 0, 0, 0.72);
     display: flex;
     flex-direction: column;
-    padding: 1em;
+    align-items: center;
+    justify-content: flex-end;
+    padding: 0;
+    padding-top: max(0.5rem, env(safe-area-inset-top, 0px));
+    box-sizing: border-box;
     overflow: hidden;
   }
   .shop-panel {
-    flex: 1;
+    flex: 0 1 auto;
     min-height: 0;
-    max-width: 560px;
+    max-width: none;
     width: 100%;
-    margin: 0 auto;
+    height: min(88dvh, calc(100dvh - env(safe-area-inset-top, 0px) - 0.5rem));
+    max-height: min(88dvh, calc(100dvh - env(safe-area-inset-top, 0px) - 0.5rem));
+    margin: 0;
+    border-radius: 16px 16px 0 0;
+    padding-bottom: env(safe-area-inset-bottom, 0px);
     display: flex;
     flex-direction: column;
     background: rgba(12, 16, 24, 0.97);
     border: 1px solid rgba(212, 175, 55, 0.28);
-    border-radius: 10px;
     overflow: hidden;
     box-shadow: 0 12px 40px rgba(0, 0, 0, 0.55);
     position: relative;
@@ -412,6 +440,9 @@
     font-size: 0.95em;
   }
   .shop-close {
+    flex: 0 0 auto;
+    min-width: 44px;
+    min-height: 44px;
     border: none;
     background: transparent;
     color: #94a3b8;
@@ -880,6 +911,40 @@
   .compare-delta.down { color: #f87171; }
   .compare-delta.same { color: #64748b; }
 
+  @media screen and (min-width: 769px) {
+    .shop-overlay {
+      justify-content: center;
+      padding:
+        max(1.25rem, env(safe-area-inset-top, 0px))
+        max(1.25rem, env(safe-area-inset-right, 0px))
+        max(1.25rem, env(safe-area-inset-bottom, 0px))
+        max(1.25rem, env(safe-area-inset-left, 0px));
+    }
+    .shop-panel {
+      width: min(560px, 100%);
+      max-width: 560px;
+      height: min(760px, 86dvh);
+      max-height: min(760px, 86dvh);
+      border-radius: 10px;
+      padding-bottom: 0;
+    }
+  }
+
+  @media screen and (max-height: 500px) {
+    .shop-overlay {
+      justify-content: flex-end;
+      padding: max(0.35rem, env(safe-area-inset-top, 0px)) 0 0;
+      overflow: hidden;
+    }
+    .shop-panel {
+      width: 100%;
+      max-width: none;
+      height: min(92dvh, calc(100dvh - env(safe-area-inset-top, 0px) - 0.35rem));
+      max-height: min(92dvh, calc(100dvh - env(safe-area-inset-top, 0px) - 0.35rem));
+      border-radius: 16px 16px 0 0;
+    }
+  }
+
   @media screen and (max-width: 520px) {
     .shop-list {
       grid-template-columns: 1fr;
@@ -902,12 +967,12 @@
 </style>
 
 {#if shop}
-  <div class="shop-overlay" role="dialog" aria-label="Shop">
-    <div class="shop-panel">
+  <div class="shop-overlay" use:portal role="dialog" aria-modal="true" aria-label="Shop">
+    <div class="shop-panel gf-panel">
       <div class="shop-header">
         <div class="shop-title">{shop.merchantName || 'Merchant'}'s Shop</div>
         <div class="shop-gold">{gold} gold</div>
-        <button class="shop-close" type="button" on:click={closeShop} aria-label="Close shop">×</button>
+        <button class="shop-close gf-close" type="button" on:click={closeShop} aria-label="Close shop">×</button>
       </div>
       <div class="shop-tabs">
         <button class="shop-tab" class:active={tab === 'buy'} type="button" on:click={() => setTab('buy')}>Buy</button>
@@ -930,7 +995,7 @@
             disabled={oos}
             aria-pressed={isSelected}
           >
-            <div class="shop-icon">
+            <div class="shop-icon gf-slot" data-quality={slotQuality(item.quality)}>
               <img
                 src={itemArtSrc(item)}
                 alt=""
@@ -942,7 +1007,7 @@
             </div>
             <div class="shop-text">
               <div class="shop-name">{item.name}</div>
-              <div class="shop-price">{rowPrice(item)}g</div>
+              <div class="shop-price"><span class="coin-gold">{rowPrice(item)}g</span></div>
             </div>
           </button>
         {:else}
@@ -963,7 +1028,7 @@
         <div class="detail-overlay" role="dialog" aria-label="{selected.name} details">
           <div class="detail-header">
             <div class="detail-title-row">
-              <div class="detail-art-wrap">
+              <div class="detail-art-wrap gf-slot" data-quality={slotQuality(selected.quality)}>
                 <img
                   class="detail-art"
                   src={itemArtSrc(selected)}
@@ -972,10 +1037,10 @@
                 />
               </div>
               <div class="detail-title-info">
-                <span class="detail-name" style="color: {getQualityColor(selected.quality)}">{selected.name}</span>
+                <span class="detail-name" data-quality={slotQuality(selected.quality)} style="color: {getQualityColor(selected.quality)}">{selected.name}</span>
                 <span class="detail-meta">
                   {#if selected.quality}
-                    <span class="detail-quality" style="color: {getQualityColor(selected.quality)}">{formatTypeName(selected.quality)}</span>
+                    <span class="detail-quality" data-quality={slotQuality(selected.quality)} style="color: {getQualityColor(selected.quality)}">{formatTypeName(selected.quality)}</span>
                   {/if}
                   {#if selected.type}
                     <span class="detail-type">{formatTypeName(selected.type)}{#if selected.subType} ({formatTypeName(selected.subType)}){/if}</span>

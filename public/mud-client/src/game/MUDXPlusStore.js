@@ -488,6 +488,7 @@ function sameAtlasSnapshot(a, b) {
 }
 
 function createStore() {
+  let outcomeTimer;
   const { subscribe, set, update } = writable({
     // Room data
     exits: [],
@@ -579,6 +580,7 @@ function createStore() {
 
     // Quest state
     quests: [], // Array of quest log entries
+    guideHint: null,
     questNotifications: [], // Recent quest events for toast notifications
 
     // Minimap / atlas state
@@ -595,6 +597,7 @@ function createStore() {
     party: { inParty: false, partyId: '', partyName: '', leaderId: '', maxMembers: 5, members: [], following: false },
     partyChat: [],
     partyInvite: null,
+    needGreed: null,
   });
 
   const store = {
@@ -995,6 +998,7 @@ function createStore() {
     },
 
     beginCombat: (enemies, players, message, initialTargetId) => {
+      clearTimeout(outcomeTimer);
       update((state) => {
         const nextEnemies = normalizeCombatantList(enemies);
         const nextPlayers = normalizeCombatantList(players);
@@ -1166,6 +1170,7 @@ function createStore() {
     },
 
     endCombat: (outcome, message, rewards) => {
+      clearTimeout(outcomeTimer);
       update((state) => {
         state.inCombat = false;
         state.combatPhase = "ending";
@@ -1184,7 +1189,7 @@ function createStore() {
       });
 
       // Longer outcome panel — Continue / dismissCombat also clears early
-      setTimeout(() => {
+      outcomeTimer = setTimeout(() => {
         update((state) => {
           if (state.combatPhase !== "ending") return state;
           state.combatPhase = "idle";
@@ -1208,6 +1213,7 @@ function createStore() {
     },
 
     dismissCombat: () => {
+      clearTimeout(outcomeTimer);
       update((state) => {
         state.inCombat = false;
         state.combatPhase = "idle";
@@ -1231,6 +1237,7 @@ function createStore() {
     },
 
     clearCombat: () => {
+      clearTimeout(outcomeTimer);
       update((state) => {
         state.inCombat = false;
         state.combatPhase = "idle";
@@ -1274,20 +1281,17 @@ function createStore() {
         return state;
       });
     },
-    addQuestNotification: (notification) => {
+    setGuideHint: (hint) => {
       update((state) => {
-        state.questNotifications = [...state.questNotifications, notification].slice(-4);
+        state.guideHint = hint && hint.text ? hint : null;
         return state;
       });
-
-      // Accepted banner stays longer; corner toasts dismiss sooner
-      const ttl = (notification?.type === 'accepted' || notification?.type === 'completed' || notification?.type === 'levelup') ? 16000 : 5000;
-      setTimeout(() => {
-        update((state) => {
-          state.questNotifications = state.questNotifications.filter(n => n.id !== notification.id && n !== notification);
-          return state;
-        });
-      }, ttl);
+    },
+    addQuestNotification: (notification) => {
+      update((state) => {
+        state.questNotifications = [...state.questNotifications, notification];
+        return state;
+      });
     },
 
     // Minimap methods
@@ -1536,6 +1540,28 @@ function createStore() {
           inviterName: String(invite.inviterName || ''),
           partyId: String(invite.partyId || invite.partyID || ''),
           expiresAt: Number(invite.expiresAt) || 0,
+        };
+        return state;
+      });
+    },
+    setNeedGreed: (roll) => {
+      update((state) => {
+        if (!roll || !roll.pending) {
+          state.needGreed = null;
+          return state;
+        }
+        const quantity = Number(roll.quantity) || 0;
+        const itemName = String(roll.itemName || roll.name || '').trim();
+        let itemLabel = itemName || 'an item';
+        if (quantity > 1) itemLabel = `${itemLabel} (x${quantity})`;
+        state.needGreed = {
+          pending: true,
+          roundId: String(roll.roundId || roll.roundID || ''),
+          itemName,
+          quality: String(roll.quality || roll.rarity || 'normal').toLowerCase() || 'normal',
+          quantity: quantity > 0 ? quantity : 1,
+          itemLabel,
+          expiresAt: Number(roll.expiresAt) || 0,
         };
         return state;
       });

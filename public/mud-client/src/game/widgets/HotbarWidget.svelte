@@ -189,6 +189,11 @@
   }
 
   .hotbar-widget.compact {
+    height: auto;
+    flex-shrink: 0;
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
     padding: 6px 8px 4px;
     background: rgba(0, 0, 0, 0.45);
     border-bottom: 1px solid rgba(255, 255, 255, 0.08);
@@ -219,6 +224,31 @@
     gap: 0.4em;
     width: 100%;
     max-width: 560px;
+  }
+
+  .hotbar-widget.compact .slots {
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    gap: 4px;
+    justify-content: center;
+    flex-wrap: wrap;
+  }
+
+  .hotbar-widget.compact .slot {
+    flex: 1 1 44px;
+    width: auto;
+    min-width: 44px;
+    max-width: 56px;
+    height: 44px;
+    min-height: 44px;
+    aspect-ratio: auto;
+  }
+
+  .picker-overlay.compact button {
+    min-width: 44px;
+    min-height: 44px;
+    box-sizing: border-box;
   }
 
   .slot {
@@ -472,7 +502,7 @@
 
 {#if pickerIndex >= 0}
   <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-  <div class="picker-overlay" on:click={closePicker}>
+  <div class="picker-overlay" class:compact on:click={closePicker}>
     <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
     <div class="picker" on:click|stopPropagation role="dialog" aria-label="Bind hotbar slot">
       <div class="picker-header">

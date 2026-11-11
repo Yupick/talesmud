@@ -18,7 +18,6 @@
   import { classCatalog } from '../../onboarding/classCatalog.js';
   import { settingsStore } from '../SettingsStore.js';
   import { resolveBattleLayoutB } from '../battleLayout.js';
-  import { overlayStore } from './overlayStore.js';
   import { itemArtSrc, onItemArtError } from '../itemArtSrc.js';
   import { backend } from '../../api/base.js';
   import { livingFocus } from '../combatFocus.js';
@@ -53,6 +52,7 @@
   let logExpanded = false;
 
   $: phase = $store.combatPhase || ($store.inCombat ? 'active' : 'idle');
+  $: lootRollPending = !!($store.needGreed && $store.needGreed.pending);
   $: visible = shown && (phase === 'active' || phase === 'ending');
   $: if (!visible) logExpanded = false;
   $: enemies = $store.combatEnemies || [];
@@ -248,15 +248,7 @@
     }
     if (nextParts && nextKey && nextKey !== lastBannerKey) {
       lastBannerKey = nextKey;
-      bannerParts = nextParts;
-      bannerText = nextParts.raw || '';
-      bannerVisible = true;
-      bannerFlashKey += 1;
-      if (bannerTimer) clearTimeout(bannerTimer);
-      bannerTimer = setTimeout(() => {
-        bannerVisible = false;
-        bannerTimer = null;
-      }, 2800);
+      showBanner(nextParts);
       const kind = nextParts.kind;
       if (kind === 'hit' || kind === 'crit' || kind === 'heal') {
         arenaFlash = true;
@@ -623,12 +615,24 @@
     return false;
   }
 
+  function showBanner(parts) {
+    bannerParts = parts;
+    bannerText = parts.raw || '';
+    bannerVisible = true;
+    bannerFlashKey += 1;
+    clearTimeout(bannerTimer);
+    bannerTimer = setTimeout(() => {
+      bannerVisible = false;
+      bannerTimer = null;
+    }, 2800);
+  }
+
   function activateHotbarSlot(bind) {
     if (!bind) return;
     const result = resolveHotbarActivation(bind, { inCombat: true, inventory });
     if (!result.ok) {
-      if (result.reason && result.reason !== 'empty' && overlayStore?.pushMessage) {
-        overlayStore.pushMessage(result.reason);
+      if (result.reason && result.reason !== 'empty') {
+        showBanner(makeBannerParts({ raw: result.reason }));
       }
       return;
     }
@@ -677,7 +681,7 @@
 
 <svelte:window on:keydown={onOutcomeKey} />
 {#if visible}
-<div class="battle-stage" class:ending={phase === 'ending'} class:layout-b={layoutB} class:reduced-motion={prefersReducedMotion($settingsStore.interface?.reducedMotion)} role="dialog" aria-label="Combat" tabindex="-1" use:combatStageFocus>
+<div class="battle-stage" class:ending={phase === 'ending'} class:yield-roll={lootRollPending} class:layout-b={layoutB} class:reduced-motion={prefersReducedMotion($settingsStore.interface?.reducedMotion)} role="dialog" aria-label="Combat" tabindex="-1" use:combatStageFocus>
   <div class="battle-backdrop" aria-hidden="true"></div>
   <div class="battle-frame">
   <header class="battle-header">
@@ -841,7 +845,7 @@
     aria-label="Enemies"
   >
     {#if phaseNotice}
-      <div class="phase-banner" role="status">{phaseNotice}</div>
+      <div class="phase-banner gf-panel" role="status">{phaseNotice}</div>
     {/if}
     {#if windupText}
       <div class="telegraph-banner" role="status">{windupText}</div>
@@ -944,6 +948,7 @@
             <div class="fx-slash" class:crit={fxIsCrit || fxIsCrush} data-key={fxKey} aria-hidden="true"></div>
           {/if}
         </div>
+        <span class="quiet-enemy-label">{enemy.name}{#if enemy.level > 0}<small>Level {enemy.level}</small>{/if}</span>
       </button>
     {/each}
   </section>
@@ -1131,7 +1136,7 @@
   <div class="action-banner-stack" aria-live="polite">
     {#if bannerVisible && bannerParts && !showJoinBanner}
       <div
-        class="action-banner kind-{bannerParts.kind}"
+        class="action-banner gf-panel kind-{bannerParts.kind}"
         class:flash={bannerFlashKey > 0}
         data-flash={bannerFlashKey}
       >
@@ -1321,7 +1326,7 @@
               {#if line.source}<span class="combat-event-source">{line.source}</span>{/if}
             </div>
           {:else if line.kind === "combatEvent"}
-            <div class="combat-event-card">
+            <div class="combat-event-card gf-panel">
               <i class="material-icons" aria-hidden="true">{combatEventIcon(line.hook)}</i>
               <span class="combat-event-text">{line.text}</span>
               {#if line.source}<span class="combat-event-source">{line.source}</span>{/if}
@@ -1339,9 +1344,10 @@
   {#if phase === 'ending'}
     <div class="outcome-panel" class:victory={outcome === 'victory'} class:defeat={outcome === 'defeat'} class:fled={outcome === 'fled'}>
       <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
-      <div class="outcome-card" role="status" on:click={dismissOutcome}>
+      <div class="outcome-card gf-panel" role="status" on:click={dismissOutcome}>
+        <div class="outcome-content">
         <div class="outcome-ornament" aria-hidden="true">♦</div>
-        <div class="outcome-title">{outcomeLabel(outcome)}</div>
+        <div class="outcome-title gf-plaque">{outcomeLabel(outcome)}</div>
         {#if outcome === 'victory' && hasRewardBreakdown}
           <ul class="reward-breakdown">
             <li>Base: {rewardBreakdown.baseXp || 0} XP, {rewardBreakdown.baseGold || 0} gold</li>
@@ -1379,7 +1385,7 @@
             </ul>
           {/if}
           {#if levelUp && levelReady}
-            <div class="level-callout">Level {levelUp.newLevel}</div>
+            <div class="level-callout gf-panel">Level {levelUp.newLevel}</div>
           {/if}
         {:else if outcome === 'defeat' && defeatInfo}
           <ul class="reward-breakdown">
@@ -1402,6 +1408,7 @@
         {:else if endMessage}
           <div class="outcome-summary">{endMessage}</div>
         {/if}
+        </div>
         <button type="button" class="outcome-continue" on:click|stopPropagation={dismissOutcome}>
           Continue
         </button>
@@ -1413,10 +1420,11 @@
 {/if}
 
 <style>
+  .quiet-enemy-label { display: none; }
   .battle-stage {
     position: fixed;
     inset: 0;
-    z-index: 9000;
+    z-index: var(--layer-battle);
     display: flex;
     align-items: center;
     justify-content: center;
@@ -3083,7 +3091,11 @@
   }
 
   .outcome-card {
-    min-width: min(92%, 360px);
+    display: flex;
+    flex-direction: column;
+    box-sizing: border-box;
+    min-width: 0;
+    width: min(26rem, calc(100vw - 1.5rem));
     max-width: 28rem;
     padding: 1.4rem 1.6rem 1.25rem;
     border-radius: 12px;
@@ -3096,6 +3108,11 @@
       0 0 0 4px rgba(212, 164, 74, 0.22),
       0 18px 48px rgba(0, 0, 0, 0.55),
       inset 0 0 0 1px rgba(255, 220, 150, 0.12);
+  }
+
+  .outcome-content {
+    min-height: 0;
+    overflow-y: auto;
   }
 
   .outcome-ornament {
@@ -3175,6 +3192,7 @@
   .reward-chip.gold i { color: #e8c878; }
 
   .outcome-continue {
+    flex-shrink: 0;
     appearance: none;
     min-width: 10rem;
     padding: 0.7rem 1.4rem;
@@ -3230,8 +3248,18 @@
   .battle-stage.ending .outcome-card {
     pointer-events: auto;
     cursor: pointer;
-    max-width: min(26rem, 38vw);
+    max-width: min(26rem, calc(100vw - 1.5rem));
+    max-height: calc(100dvh - 5.75rem);
+    overflow: hidden;
     text-align: left;
+  }
+  .battle-stage.ending.yield-roll .outcome-panel {
+    justify-items: center;
+    padding-top: max(0.75rem, env(safe-area-inset-top, 0px));
+  }
+  .battle-stage.ending.yield-roll .outcome-card {
+    max-width: min(26rem, calc(100vw - 1.5rem));
+    max-height: min(46dvh, calc(100dvh - 16.5rem));
   }
   .battle-stage.ending .outcome-title,
   .battle-stage.ending .outcome-ornament,
@@ -3246,6 +3274,16 @@
   .battle-stage.ending .outcome-continue {
     margin-left: auto;
     margin-right: auto;
+  }
+
+  @media (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
+    .battle-stage.ending.yield-roll .outcome-panel { justify-items: start; }
+    .battle-stage.ending.yield-roll .outcome-card {
+      min-width: 0;
+      width: calc(50vw - 1.5rem);
+      max-width: calc(50vw - 1.5rem);
+      max-height: calc(100dvh - 1.5rem);
+    }
   }
 
   .loot-reveal {
@@ -3440,8 +3478,7 @@
     }
   }
 
-  /* C7-mobile: thumb-first stack ≤768px — header / arena / dock / log-peek */
-  @media (max-width: 768px) {
+  @media (max-width: 768px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
     .battle-stage {
       display: flex;
       align-items: stretch;
@@ -3745,17 +3782,17 @@
       width: 100%;
       flex: 0 0 auto;
       box-sizing: border-box;
-      gap: 0.28rem;
+      gap: 4px;
       padding: 0;
-      overflow-x: auto;
-      -webkit-overflow-scrolling: touch;
-      justify-content: space-between;
+      overflow: hidden;
+      justify-content: center;
     }
     .hb-slot {
-      width: clamp(44px, 11.5vw, 52px);
-      height: clamp(44px, 11.5vw, 52px);
-      min-width: 44px;
-      min-height: 44px;
+      width: auto;
+      height: auto;
+      aspect-ratio: 1;
+      min-width: 0;
+      min-height: 0;
       flex: 1 1 0;
       max-width: 52px;
     }
@@ -4005,7 +4042,7 @@
     margin: 0;
     max-width: 100%;
   }
-  /* WoW-style: small rectangles above/beside the combat portrait */
+  /* Small rectangles above/beside the combat portrait */
   .buff-row.portrait-buffs {
     position: absolute;
     z-index: 5;
@@ -4484,7 +4521,7 @@
       linear-gradient(to right, rgba(0, 0, 0, 0.42) 0%, transparent 22%, transparent 78%, rgba(0, 0, 0, 0.42) 100%);
   }
 
-  @media (max-width: 768px) {
+  @media (max-width: 768px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
     .battle-stage.layout-b .layout-b-frame {
       width: min(46%, 200px);
       top: 0.35rem;

@@ -282,6 +282,7 @@ func handleCharacterSelected(game def.GameCtrl, user *entities.User, character *
 
 	// Send initial quest log to the client
 	sendQuestLogToPlayer(game, user.ID, character.ID)
+	PushGuideHint(game, user.ID, character)
 
 	// Sighting is the room they just entered. Catch-up may relocate them and notes the destination.
 	game.NotePlayerEntered(character.ID, currentRoom.ID)

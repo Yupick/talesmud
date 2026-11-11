@@ -6,6 +6,7 @@ import (
 	npc "github.com/talesmud/talesmud/pkg/entities/npcs"
 	"github.com/talesmud/talesmud/pkg/entities/quests"
 	"github.com/talesmud/talesmud/pkg/entities/rooms"
+	"github.com/talesmud/talesmud/pkg/mudserver/game/commands"
 	def "github.com/talesmud/talesmud/pkg/mudserver/game/def"
 	"github.com/talesmud/talesmud/pkg/mudserver/game/messages"
 	"github.com/talesmud/talesmud/pkg/service"
@@ -257,6 +258,11 @@ func (qt *QuestTracker) sendProgressUpdate(userID string, quest *quests.Quest, p
 
 	qt.game.SendMessage() <- msg
 	qt.pushQuestLogSnapshot(userID, progress.CharacterID)
+	if qt.facade != nil && qt.facade.CharactersService() != nil && progress.CharacterID != "" {
+		if char, err := qt.facade.CharactersService().FindByID(progress.CharacterID); err == nil {
+			commands.PushGuideHint(qt.game, userID, char)
+		}
+	}
 }
 
 // pushQuestLogSnapshot sends a full questLog so clients do not go stale after toasts.
@@ -307,6 +313,10 @@ func (qt *QuestTracker) pushQuestLogSnapshot(userID, characterID string) {
 			}
 		}
 		entry.ReadyToTurnIn = progress.Status == quests.QuestStatusActive && allDone
+		payload := commands.QuestRepeatPayload(quest, string(progress.Status), progress.CompletedAt)
+		entry.Repeats = payload.Repeats
+		entry.RepeatReset = payload.RepeatReset
+		entry.NextAvailableAt = payload.NextAvailableAt
 		entries = append(entries, entry)
 	}
 	qt.game.SendMessage() <- messages.NewQuestLogMessage(userID, entries)

@@ -1,6 +1,8 @@
 package ruleset_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -43,6 +45,149 @@ func TestShippedFileMatchesCurrentPlay(t *testing.T) {
 	}
 	if healed.CurrentHitPoints != 1 || healed.LastResetDay != "" {
 		t.Fatalf("new day wrote %+v", healed)
+	}
+}
+
+func TestQuestDailyResetHour(t *testing.T) {
+	ruleset.Reset()
+	t.Cleanup(ruleset.Reset)
+	if ruleset.QuestDailyResetHourUTC() != 4 {
+		t.Fatalf("default hour %d", ruleset.QuestDailyResetHourUTC())
+	}
+	if err := ruleset.LoadBytes([]byte("quests:\n  daily_reset_hour_utc: 6\n")); err != nil {
+		t.Fatal(err)
+	}
+	if ruleset.QuestDailyResetHourUTC() != 6 {
+		t.Fatalf("hour %d", ruleset.QuestDailyResetHourUTC())
+	}
+	if err := ruleset.LoadBytes([]byte("quests: {}\n")); err != nil {
+		t.Fatal(err)
+	}
+	if ruleset.QuestDailyResetHourUTC() != 4 {
+		t.Fatal("omitted hour left the override in place")
+	}
+	if err := ruleset.LoadBytes([]byte("quests:\n  daily_reset_hour_utc: 24\n")); err == nil {
+		t.Fatal("hour 24 was accepted")
+	}
+}
+
+func TestQuietDarkThemeOverlay(t *testing.T) {
+	ruleset.Reset()
+	t.Cleanup(ruleset.Reset)
+	if err := ruleset.ApplyOverlay([]byte("ui:\n  default_theme: quiet-dark\n")); err != nil {
+		t.Fatal(err)
+	}
+	if ruleset.DefaultTheme() != ruleset.DefaultThemeQuietDark {
+		t.Fatalf("theme %q", ruleset.DefaultTheme())
+	}
+	if err := ruleset.ApplyOverlay([]byte("quests: {}\n")); err != nil {
+		t.Fatal(err)
+	}
+	if ruleset.DefaultTheme() != ruleset.DefaultThemeQuietDark {
+		t.Fatal("omitted overlay reset theme")
+	}
+	ruleset.Reset()
+	if ruleset.DefaultTheme() != ruleset.DefaultThemeDarkFantasy {
+		t.Fatal("engine fallback changed")
+	}
+}
+
+func TestDefaultThemeKey(t *testing.T) {
+	ruleset.Reset()
+	t.Cleanup(ruleset.Reset)
+	if ruleset.DefaultTheme() != ruleset.DefaultThemeDarkFantasy {
+		t.Fatalf("default theme %q", ruleset.DefaultTheme())
+	}
+	if err := ruleset.LoadBytes([]byte("progression:\n  level_cap: 12\n")); err != nil {
+		t.Fatal(err)
+	}
+	if ruleset.DefaultTheme() != ruleset.DefaultThemeDarkFantasy || ruleset.LevelCap() != 12 {
+		t.Fatalf("omitted theme %q cap %d", ruleset.DefaultTheme(), ruleset.LevelCap())
+	}
+	if err := ruleset.LoadBytes([]byte("ui:\n  default_theme: gilded\n")); err != nil {
+		t.Fatal(err)
+	}
+	if ruleset.DefaultTheme() != ruleset.DefaultThemeGilded {
+		t.Fatalf("theme %q", ruleset.DefaultTheme())
+	}
+	if err := ruleset.LoadBytes([]byte("ui:\n  default_theme: \"\"\n")); err != nil {
+		t.Fatal(err)
+	}
+	if ruleset.DefaultTheme() != ruleset.DefaultThemeDarkFantasy {
+		t.Fatalf("empty theme %q", ruleset.DefaultTheme())
+	}
+	if err := ruleset.LoadBytes([]byte("ui:\n  default_theme: gilded\n")); err != nil {
+		t.Fatal(err)
+	}
+	err := ruleset.LoadBytes([]byte("ui:\n  default_theme: neon\n"))
+	if err == nil || !strings.Contains(err.Error(), "default_theme") {
+		t.Fatalf("err = %v", err)
+	}
+	if ruleset.DefaultTheme() != ruleset.DefaultThemeGilded {
+		t.Fatalf("rejected document changed theme to %q", ruleset.DefaultTheme())
+	}
+}
+
+func TestWorldOverlayKeepsEngineProfile(t *testing.T) {
+	ruleset.Reset()
+	t.Cleanup(ruleset.Reset)
+	if err := ruleset.LoadBytes([]byte("progression:\n  level_cap: 12\nguide:\n  enabled: false\n")); err != nil {
+		t.Fatal(err)
+	}
+	dir := t.TempDir()
+	if err := ruleset.ApplyActiveImport(dir); err != nil {
+		t.Fatal(err)
+	}
+	if ruleset.DefaultTheme() != ruleset.DefaultThemeDarkFantasy || ruleset.LevelCap() != 12 || ruleset.GuideEnabled() {
+		t.Fatalf("missing marker theme %q cap %d guide %v", ruleset.DefaultTheme(), ruleset.LevelCap(), ruleset.GuideEnabled())
+	}
+	world := filepath.Join(dir, "mvp-rpg-1", "config")
+	if err := os.MkdirAll(world, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, ".active"), []byte("mvp-rpg-1\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(world, "ruleset.yaml"), []byte("ui:\n  default_theme: gilded\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := ruleset.ApplyActiveImport(dir); err != nil {
+		t.Fatal(err)
+	}
+	if ruleset.DefaultTheme() != ruleset.DefaultThemeGilded || ruleset.LevelCap() != 12 || ruleset.GuideEnabled() {
+		t.Fatalf("overlay theme %q cap %d guide %v", ruleset.DefaultTheme(), ruleset.LevelCap(), ruleset.GuideEnabled())
+	}
+}
+
+func TestGuideEnabledKey(t *testing.T) {
+	ruleset.Reset()
+	t.Cleanup(ruleset.Reset)
+	if !ruleset.GuideEnabled() {
+		t.Fatal("default guide.enabled is off")
+	}
+	if err := ruleset.LoadBytes([]byte("progression:\n  level_cap: 12\n")); err != nil {
+		t.Fatal(err)
+	}
+	if !ruleset.GuideEnabled() || ruleset.LevelCap() != 12 {
+		t.Fatalf("omitted key enabled=%v cap=%d", ruleset.GuideEnabled(), ruleset.LevelCap())
+	}
+	if err := ruleset.LoadBytes([]byte("guide:\n  enabled: false\n")); err != nil {
+		t.Fatal(err)
+	}
+	if ruleset.GuideEnabled() {
+		t.Fatal("guide.enabled false stayed on")
+	}
+	if err := ruleset.LoadBytes([]byte("guide:\n  enabled: true\n")); err != nil {
+		t.Fatal(err)
+	}
+	if !ruleset.GuideEnabled() {
+		t.Fatal("guide.enabled true stayed off")
+	}
+	if err := ruleset.LoadBytes([]byte("guide: {}\n")); err != nil {
+		t.Fatal(err)
+	}
+	if !ruleset.GuideEnabled() {
+		t.Fatal("empty guide block turned the hint off")
 	}
 }
 

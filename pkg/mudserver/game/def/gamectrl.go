@@ -128,7 +128,7 @@ type PartyInvite struct {
 	CreatedAt            time.Time
 }
 
-// RoomInstanceCtrl is a WoW-style private copy of a small room graph.
+// RoomInstanceCtrl is a gilded fantasy frame private copy of a small room graph.
 type RoomInstanceCtrl interface {
 	Enter(characterID, hubID, destID string) (clonedDestID string, err error)
 	NoteLeave(characterID, fromRoomID, toRoomID string)
@@ -303,6 +303,12 @@ type GameCtrl interface {
 	GetPartyInvite(targetCharacterID string) (PartyInvite, bool)
 	// ClearPartyInvite removes a pending invite.
 	ClearPartyInvite(targetCharacterID string)
+	// RecordNeedGreedChoice records need/greed/pass for the open loot round.
+	RecordNeedGreedChoice(characterID, userID, choice string) bool
+	// HasActiveNeedGreed is true when the character is in the open loot round.
+	HasActiveNeedGreed(characterID string) bool
+	// NoteNeedGreedMemberLeft treats the character as Pass for open/queued rounds.
+	NoteNeedGreedMemberLeft(characterID string)
 	// SetPartyFollow marks followerID as following the party leader.
 	SetPartyFollow(followerID, leaderID string)
 	// ClearPartyFollow stops one character following. Reports the leader they were following.

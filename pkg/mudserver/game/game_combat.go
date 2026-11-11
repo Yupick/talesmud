@@ -1164,6 +1164,11 @@ func (c *CombatController) cleanupCombatInstance(instance *combat.CombatInstance
 
 	// Remove the instance before catch-up so IsPlayerInCombat is clear.
 	c.manager.RemoveInstance(instance.ID)
+	// Quiet is stamped after InCombat is cleared. Catch-up may walk someone
+	// into this room, and that entry has to see the window already.
+	if c.game != nil {
+		c.game.stampPostCombatAggroQuiet(instance, endState)
+	}
 	for _, player := range instance.Players {
 		if player.ID == "" || c.game == nil {
 			continue
@@ -1236,7 +1241,8 @@ func (c *CombatController) refreshOriginRoomAfterCombat(instance *combat.CombatI
 
 // processCombatVictory handles XP, gold, loot rewards and sends the victory message.
 // Gold and XP split across living combatants. Online party members in the killer's
-// room are added to that split (Party Loot & XP Share v1). Item drops stay in the room.
+// room are added to that split (Party Loot & XP Share v1). With 2+ eligible party
+// members, item drops open Party Need/Greed rounds instead of free ground loot.
 func (c *CombatController) processCombatVictory(instance *combat.CombatInstance) {
 	var rawRewards []rawEnemyReward
 	var allLootItems []string
@@ -1245,7 +1251,10 @@ func (c *CombatController) processCombatVictory(instance *combat.CombatInstance)
 
 	// Get the room for loot drops
 	room, roomErr := c.game.Facade.RoomsService().FindByID(instance.OriginRoomID)
-	lootRecipients := victoryRecipientIDs(c, instance, instance.GetLivingPlayers())
+	livingForLoot := instance.GetLivingPlayers()
+	lootRecipients := victoryRecipientIDs(c, instance, livingForLoot)
+	rollers, partyID, useNeedGreed := c.needGreedRollers(instance, livingForLoot)
+	var needGreedItems []*items.Item
 
 	for _, enemy := range instance.Enemies {
 		if enemy.IsAlive || enemy.Summoned {
@@ -1284,19 +1293,24 @@ func (c *CombatController) processCombatVictory(instance *combat.CombatInstance)
 			baseGold: goldRoll,
 		})
 
-		// Process loot drops (items placed in room)
+		// Process loot drops (items placed in room, or held for Need/Greed)
 		if roomErr == nil && room != nil {
 			// Use first living player's level for level-gated drops
 			var killerLevel int32 = 1
-			livingPlayers := instance.GetLivingPlayers()
-			if len(livingPlayers) > 0 {
-				char, err := c.game.Facade.CharactersService().FindByID(livingPlayers[0].ID)
+			if len(livingForLoot) > 0 {
+				char, err := c.game.Facade.CharactersService().FindByID(livingForLoot[0].ID)
 				if err == nil && char != nil {
 					killerLevel = char.Level
 				}
 			}
 
-			lootResult, err := DropLootFromNPCFor(c.game.Facade, npcData, room, killerLevel, lootRecipients)
+			var lootResult *LootDropResult
+			var err error
+			if useNeedGreed {
+				lootResult, err = RollLootFromNPCFor(c.game.Facade, npcData, room, killerLevel, lootRecipients)
+			} else {
+				lootResult, err = DropLootFromNPCFor(c.game.Facade, npcData, room, killerLevel, lootRecipients)
+			}
 			if err == nil && lootResult != nil {
 				for _, item := range lootResult.RareUnique {
 					if item == nil || strings.TrimSpace(item.Name) == "" || c.game == nil {
@@ -1312,8 +1326,8 @@ func (c *CombatController) processCombatVictory(instance *combat.CombatInstance)
 					if c.game != nil {
 						var partyID string
 						var lootRule string
-						if len(livingPlayers) > 0 && livingPlayers[0] != nil {
-							if p, r := partyForChar(c.game.Facade, livingPlayers[0].ID); p != nil {
+						if len(livingForLoot) > 0 && livingForLoot[0] != nil {
+							if p, r := partyForChar(c.game.Facade, livingForLoot[0].ID); p != nil {
 								partyID = p.ID
 								lootRule = r
 							}
@@ -1322,14 +1336,14 @@ func (c *CombatController) processCombatVictory(instance *combat.CombatInstance)
 							lootRule = "free"
 						}
 						e := make([]string, 0)
-						for _, lp := range livingPlayers {
+						for _, lp := range livingForLoot {
 							if lp != nil && lp.ID != "" {
 								e = append(e, lp.ID)
 							}
 						}
 						ctx = &LootAssignmentContext{Game: c.game, PartyID: partyID, LootRule: lootRule, Eligible: e, KillerID: func() string {
-							if len(livingPlayers) > 0 && livingPlayers[0] != nil {
-								return livingPlayers[0].ID
+							if len(livingForLoot) > 0 && livingForLoot[0] != nil {
+								return livingForLoot[0].ID
 							}
 							return ""
 						}(), RoomID: instance.OriginRoomID, RoundRobin: new(int)}
@@ -1369,8 +1383,15 @@ func (c *CombatController) processCombatVictory(instance *combat.CombatInstance)
 						allLootItems = append(allLootItems, reveal.Name)
 					}
 				}
+				if useNeedGreed {
+					needGreedItems = append(needGreedItems, lootResult.Items...)
+				}
 			}
 		}
+	}
+
+	if useNeedGreed && len(needGreedItems) > 0 && c.game != nil {
+		c.game.enqueueNeedGreedItems(instance.OriginRoomID, partyID, rollers, needGreedItems)
 	}
 
 	// Track quest progress for NPC kills
@@ -1521,7 +1542,8 @@ func (c *CombatController) processCombatVictory(instance *combat.CombatInstance)
 
 	// Loot is placed after the pre-victory room refresh, so push a second
 	// roomUpdate now that ground items exist (Pickup UI / groundItems store).
-	if len(allLootItems) > 0 {
+	// Need/Greed holds items off the ground until the round resolves.
+	if len(allLootItems) > 0 && !useNeedGreed {
 		c.refreshOriginRoomAfterCombat(instance)
 	}
 }

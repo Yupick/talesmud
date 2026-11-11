@@ -42,8 +42,8 @@
     position: absolute;
     left: 15px;
     top: 15px;
-    z-index: 1000;
-    padding: 1em;
+    z-index: var(--layer-chrome);
+    padding: 0.25em;
   }
 
   .user-menu-wrapper {
@@ -60,7 +60,7 @@
     padding: 0;
   }
 
-  @media screen and (max-width: 768px) {
+  @media (max-width: 768px), (max-width: 1024px) and (max-height: 500px) and (orientation: landscape) {
     .back-link {
       display: none;
     }
@@ -82,6 +82,7 @@
   import { createGuestSession } from "./api/guest.js";
   import { guestCreateBody } from "./onboarding/raceAllow.js";
   import { getServerInfo } from "./api/server-info.js";
+  import { settingsStore } from "./game/SettingsStore.js";
   import { getUser } from "./api/user.js";
   import { getMyCharacters } from "./api/characters.js";
 
@@ -123,6 +124,7 @@
         if (data.serverName) {
           serverName = data.serverName;
         }
+        settingsStore.setServerDefault(data.defaultTheme);
       },
       (err) => console.warn("Could not load server info:", err)
     );

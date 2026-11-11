@@ -1,5 +1,6 @@
 <script>
   import { writable } from "svelte/store";
+  import RepeatMark from "./RepeatMark.svelte";
 
   export let quests = [];
   export let visible = false;
@@ -228,10 +229,10 @@
 
 {#if visible}
   <div class="quest-log-overlay">
-    <div class="quest-log-panel">
+    <div class="quest-log-panel gf-panel">
       <div class="quest-log-header">
         <div class="header-row">
-          <h2>Quest Log</h2>
+          <h2 class="gf-plaque">Quest Log</h2>
           <button class="close-btn" on:click={close}>&times;</button>
         </div>
         <div class="quest-toolbar" role="toolbar" aria-label="Quest filters and tools">
@@ -419,7 +420,7 @@
 
           {#if pinnedQuestList.length > 0}
           <div class="quest-section">
-            <h3 class="section-title">📌 Pinned ({pinnedQuestList.length})</h3>
+            <h3 class="section-title gf-plaque">📌 Pinned ({pinnedQuestList.length})</h3>
             {#each pinnedQuestList as quest}
               <div class="quest-entry is-pinned" class:ready={isQuestReady(quest)} class:expanded={expandedQuest === quest.questId}>
                 <button
@@ -429,6 +430,7 @@
                   <span class="quest-indicator active is-pinned" class:ready={isQuestReady(quest)}></span>
                   <div class="quest-title-row">
                     <span class="quest-title">{quest.questName || 'Unnamed Quest'}</span>
+                    <RepeatMark {quest} />
                     <div class="quest-badges">
                       {#if isQuestReady(quest)}
                         <span class="quest-badge ready-badge">Ready</span>
@@ -520,7 +522,7 @@
 
         {#if unpinnedActiveQuests.length > 0}
           <div class="quest-section">
-            <h3 class="section-title">Active ({unpinnedActiveQuests.length})</h3>
+            <h3 class="section-title gf-plaque">Active ({unpinnedActiveQuests.length})</h3>
             {#each unpinnedActiveQuests as quest}
               <div class="quest-entry" class:ready={isQuestReady(quest)} class:expanded={expandedQuest === quest.questId}>
                 <button
@@ -530,6 +532,7 @@
                   <span class="quest-indicator active" class:ready={isQuestReady(quest)}></span>
                   <div class="quest-title-row">
                     <span class="quest-title">{quest.questName || 'Unnamed Quest'}</span>
+                    <RepeatMark {quest} />
                     <div class="quest-badges">
                       {#if isQuestReady(quest)}
                         <span class="quest-badge ready-badge">Ready</span>
@@ -621,7 +624,7 @@
 
         {#if showCompleted && completedQuests.length > 0}
           <div class="quest-section">
-            <h3 class="section-title">Completed ({completedQuests.length})</h3>
+            <h3 class="section-title gf-plaque">Completed ({completedQuests.length})</h3>
             {#each completedQuests as quest}
               <div class="quest-entry completed" class:expanded={expandedQuest === quest.questId}>
                 <button
@@ -631,6 +634,7 @@
                   <span class="quest-indicator completed"></span>
                   <div class="quest-title-row">
                     <span class="quest-title">{quest.questName || 'Unnamed Quest'}</span>
+                    <RepeatMark {quest} />
                     <div class="quest-badges">
                       {#if quest.level}
                         <span class="quest-badge level-badge">L{quest.level}</span>
@@ -700,7 +704,7 @@
 
         {#if abandonedQuests.length > 0}
           <div class="quest-section">
-            <h3 class="section-title">Abandoned ({abandonedQuests.length})</h3>
+            <h3 class="section-title gf-plaque">Abandoned ({abandonedQuests.length})</h3>
             {#each abandonedQuests as quest}
               <div class="quest-entry abandoned">
                 <button
@@ -710,6 +714,7 @@
                   <span class="quest-indicator abandoned"></span>
                   <div class="quest-title-row">
                     <span class="quest-title">{quest.questName || 'Unnamed Quest'}</span>
+                    <RepeatMark {quest} />
                   </div>
                   <span class="expand-icon">{expandedQuest === quest.questId ? "▾" : "▸"}</span>
                 </button>
@@ -720,7 +725,7 @@
 
         {#if failedQuests.length > 0}
           <div class="quest-section">
-            <h3 class="section-title">Failed ({failedQuests.length})</h3>
+            <h3 class="section-title gf-plaque">Failed ({failedQuests.length})</h3>
             {#each failedQuests as quest}
               <div class="quest-entry failed">
                 <button
@@ -730,6 +735,7 @@
                   <span class="quest-indicator failed"></span>
                   <div class="quest-title-row">
                     <span class="quest-title">{quest.questName || 'Unnamed Quest'}</span>
+                    <RepeatMark {quest} />
                   </div>
                   <span class="expand-icon">{expandedQuest === quest.questId ? "▾" : "▸"}</span>
                 </button>

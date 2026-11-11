@@ -11,7 +11,7 @@
   .entity-card {
     --entity-accent: rgba(255, 255, 255, 0.28);
     position: relative;
-    width: clamp(88px, 22cqw, 128px);
+    width: var(--entity-card-width, clamp(88px, 22cqw, 128px));
     aspect-ratio: 2 / 3;
     border-radius: 10px;
     overflow: hidden;
@@ -552,7 +552,7 @@
       {@const extraVerbs = hasExtraVerbs(npc)}
       <!-- svelte-ignore a11y-click-events-have-key-events a11y-no-static-element-interactions -->
       <div
-        class="entity-card {getEntityType(npc)}"
+        class="entity-card {getEntityType(npc)}{npc.threat ? ` threat-${npc.threat}` : ''}"
         class:clickable={primary}
         on:click={() => handleCardClick(npc, primary)}
         on:keydown={(e) => handleCardKeydown(e, npc, primary)}
@@ -594,7 +594,7 @@
         {/if}
 
         <div class="entity-footer">
-          <span class="entity-name" class:threat-grey={npc.threat === 'grey'} class:threat-green={npc.threat === 'green'} class:threat-yellow={npc.threat === 'yellow'} class:threat-orange={npc.threat === 'orange'} class:threat-red={npc.threat === 'red'} class:threat-skull={npc.threat === 'skull'}>
+          <span class="entity-name gf-plaque" class:threat-grey={npc.threat === 'grey'} class:threat-green={npc.threat === 'green'} class:threat-yellow={npc.threat === 'yellow'} class:threat-orange={npc.threat === 'orange'} class:threat-red={npc.threat === 'red'} class:threat-skull={npc.threat === 'skull'}>
             {#if npc.threat === 'skull'}<span class="skull-mark" title="Skull" aria-hidden="true">☠</span>{/if}{npc.displayName}
           </span>
           {#if npc.aggroOnSight}

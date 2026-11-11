@@ -143,6 +143,7 @@ function createClient(renderer, characterCreator, muxStore) {
   messageHandlers["characterSelected"] = (msg) => {
     currentCharacter = msg.character;
     renderer(msg.message);
+    if (mux && mux.setGuideHint) mux.setGuideHint(null);
     if (mux && msg.character) {
       mux.setCharacter(msg.character);
       mux.updateCharacterStats({ xpForNextLevel: msg.xpForNextLevel });
@@ -265,6 +266,19 @@ function createClient(renderer, characterCreator, muxStore) {
     }
   };
 
+  messageHandlers["need_greed"] = (msg) => {
+    if (mux && mux.setNeedGreed) {
+      mux.setNeedGreed({
+        pending: !!msg.pending,
+        roundId: msg.roundId || msg.roundID || '',
+        itemName: msg.itemName || msg.name || '',
+        quality: msg.quality || msg.rarity || 'normal',
+        quantity: msg.quantity || 0,
+        expiresAt: msg.expiresAt || 0,
+      });
+    }
+  };
+
   messageHandlers["shop"] = (msg) => {
     if (mux) {
       mux.setShop({
@@ -315,7 +329,6 @@ function createClient(renderer, characterCreator, muxStore) {
   // Combat message handlers — BattleStage is primary UX (C2); skip room toasts.
   messageHandlers["combatStart"] = (msg) => {
     renderer(msg.message);
-    if (overlayStore.clearAll) overlayStore.clearAll();
     if (mux) {
       mux.updateCharacterStats({ inCombat: true });
       if (mux.beginCombat) {
@@ -569,6 +582,22 @@ function createClient(renderer, characterCreator, muxStore) {
 
     // Refresh quest log so the abandoned quest is removed from the active list
     requestQuestLog();
+  };
+
+  messageHandlers["guideHint"] = (msg) => {
+    if (!mux || !mux.setGuideHint) return;
+    const text = String((msg && msg.text) || "").trim();
+    if (!text) {
+      mux.setGuideHint(null);
+      return;
+    }
+    mux.setGuideHint({
+      text,
+      questName: msg.questName || "",
+      step: msg.step || "",
+      command: msg.command || "",
+      label: msg.label || "",
+    });
   };
 
   messageHandlers["questLog"] = (msg) => {

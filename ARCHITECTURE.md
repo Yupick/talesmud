@@ -153,6 +153,14 @@ Use `SQLITE_PATH` to specify the database file path (defaults to `talesmud.db`).
     └── world              # World map (basic auth)
 ```
 
+`GET /api/server-info` adds `envLabel` from `ADMIN_ENV_LABEL` and `host` from `ADMIN_ENV_HOST` or the request host. The top bar shows a red `{label} · {host}` badge only when the label is non-empty. The same payload includes `defaultTheme` from the active ruleset key `ui.default_theme`. Omitted, empty, and unknown-at-startup values stay `dark-fantasy`. An unknown theme string is rejected and does not replace the current profile. The play client stores `auto` unless the player picks Dark Fantasy, Clean HUD, or Gilded Frame. `auto` paints the server theme. A saved `dark-fantasy` without that explicit choice becomes `auto` on load. Theme CSS is `public/mud-client/public/themes.css` plus `public/themes/gilded/` (`tokens.css`, `components.css`, `chrome.css`, `w2-screens.css`, `w3-screens.css`). Inventory, equipment, the character sheet, item cards, party, recipes, and sign-in are in `w2-screens.css`. Dialog, quest log, shop, notices, combat stage, and room entity cards are in `w3-screens.css`, loaded after it. A content pack may set the same key in `config/ruleset.yaml`. Import writes `import/.active`, and the server merges that file onto the engine profile at startup. Omitted keys stay on the engine values. The cache tag on the play CSS links stays with the rest of the play CSS.
+
+Creator writes (POST/PUT/DELETE for rooms, items, NPCs, loot tables, spawners, dialogs, quests, scripts, skills, character templates, and settings) pass through `AuditWrites`. Each successful write stores actor, action, entity, before JSON, and after JSON in `audit_log`. `POST /api/loot-tables/:id/roll` is a creator preview and stays off that middleware: it does not record a row, drop the search index, or create items. Deletes keep the full before document. `POST /api/audit/:id/undo` (admin) restores that before state, or runs the stored inverse for a live op. Undo is refused when the row is not undoable, already undone, or the current document no longer matches the recorded after state. The undo itself is an audit row.
+
+`POST /api/ops/:action` (admin) requires `confirm: true` and runs inside `Game.Call`, on the same command loop as player commands. It does not write an online character's database row from the HTTP handler. Each success records an audit row. `end-combat` and `instance-cleanup` are not undoable. Quest completion with an objective id only advances that step. Completion without an objective id grants rewards; undoing the progress row does not claw those rewards back.
+
+`GET /api/live/characters` and `GET /api/live/characters/:id` are admin-only. They list characters who are online or whose user was seen within 30 days, and the detail includes inventory and the quest log. `all=1` includes older characters. A creator receives 403. NPC and instance reads stay on the creator routes and use the same game-loop call.
+
 `GET /api/quest-progress/:characterId` returns quest progress merged with quest definition fields for the player UI. Objective rows include `objectiveId`, definition `description`, current/required counts, and completion state so REST refreshes and WebSocket quest log messages have matching player-facing text.
 
 Social routes (`pkg/server/handler/clans.go`, `pkg/server/handler/dms.go`) run at the authenticated player level. The acting character is passed explicitly (`?characterId=` for `GET`, JSON body for `POST`) and `resolveOwnedCharacter` verifies `character.BelongsUserID == user.ID` (admins may act on any character) before the service is called. Clan permissions are enforced in `ClansService`: create when not already in a clan, invite/kick as leader or officer (the leader can never be kicked), rank changes and bank withdrawals/disband as leader, deposits as any member. DM permissions are enforced in `DMService`: send/get/mark-read require the character to be a channel participant (anti-spoof), and `FindOrCreateChannel` canonicalizes the pair. Service errors are mapped to stable HTTP status codes (400/401/403/404/409).
@@ -375,7 +383,9 @@ The game runs multiple update tickers:
 
 3. **Spawner Updates** (5 seconds)
    - Check each spawner's instance count
-   - Spawn new instances when below max capacity
+   - Fill `InitialCount` immediately until the spawner has lost an instance
+   - After a death, wait the longer of `RespawnDelay` and `combat.respawn_min_seconds` (default 30s)
+   - Let `SpawnInterval` space only the extras between `InitialCount` and `MaxInstances`
    - Clean up dead instances from spawner tracking
 
 4. **Combat Updates** (2 seconds)
@@ -434,7 +444,7 @@ Key methods:
 
 Turn-based combat occurs in isolated **Combat Instances** that manage fights between players and NPCs.
 
-Aggro on sight uses that same start. `combat.aggro_on_sight` (default on, 2.5s grace, level gap 5, 15s reaggro cooldown) schedules one watch per player and aggressive NPC when the player enters the room or the NPC arrives. The timer enqueues onto the command loop. The loop re-checks, posts `The <name> spots you.` as a normal message, and calls `BeginEngagement`, which calls `InitiateCombat`. Swarm pack, one `onAggro`, and the party assist nudge match a manual `attack`. Leaving during the grace cancels the watch. The cooldown starts when the fight ends.
+Aggro on sight uses that same start. `combat.aggro_on_sight` (default on, 2.5s grace, level gap 5, 15s reaggro cooldown) schedules one watch per player and aggressive NPC when the player enters the room or the NPC arrives. A death replacement and a unique NPC respawn use `respawn_grace_seconds` (default 8) for players already in the room. The first fill, a walk-in, and a summon keep the short grace. After a victory or flee, `post_combat_grace_seconds` (default 10) holds aggressive NPCs in the fight room for players still standing there. Entering a different room ends that hold. `spawn_aggro_cooldown_seconds` (default 60) is stored on the spawner id, or on the resident NPC id, so a new instance remembers the player it already auto-aggroed. The timer enqueues onto the command loop. The loop re-checks, posts `The <name> spots you.` as a normal message, and calls `BeginEngagement`, which calls `InitiateCombat`. Swarm pack, one `onAggro`, and the party assist nudge match a manual `attack`. Leaving during the grace cancels the watch. The per-instance cooldown starts when the fight ends. A room with `noAggro` is skipped at schedule and again when the timer fires. Room NPC payloads include optional `aggroOnSight: true` (`omitempty`, absent for passive NPCs) so the play client can mark those cards. The field is copied through both the runtime room summary and the websocket response. Look and examine of that NPC add a line `Aggressive`.
 
 #### Combat Instance Model
 
@@ -506,6 +516,8 @@ type StatusEffect struct {
        │   │     Gap 0 matches the pre-gap formulas.
        │   │     class_balance then scales damage dealt and taken per class.
        │   │     The pack catalog wins. The YAML row is the fallback.
+       │   │     early_normal scales normal-tier enemies at level 6 and below.
+       │   │     newbie_curve adds level 1–5 factors. Level 10 does not use them.
        │   │     A soak class's Slam starts its cooldown only when the swing hits.
        │   │     wizard uses the mage row; behind_dealt applies when lower level.
        │   │     boss_mechanics: bosses and hard elites wind up one action before
@@ -1188,12 +1200,15 @@ type NPCSpawner struct {
     TemplateID    string         // NPC template to spawn
     RoomID        string         // Where to spawn
     MaxInstances  int            // Max alive at once
-    SpawnInterval time.Duration  // Time between spawns
+    SpawnInterval time.Duration  // Time between extra spawns above InitialCount
     InitialCount  int            // Spawn on world load
+    RespawnDelay  time.Duration  // Wait after a death; the ruleset floor can extend it
 
     RespawnTimeOverride *time.Duration  // Override template respawn
 }
 ```
+
+`combat.respawn_min_seconds` (default 30) is the floor under `RespawnDelay` after a death. `0` disables that floor. A spawner that has not lost an instance still fills `InitialCount` on the next tick.
 
 ### LootTable Entity
 
@@ -1232,7 +1247,9 @@ type Quest struct {
     Category    string       // "main", "side", "daily"
     Area        string       // Optional region label for filtering and organization
     Level       int32        // Recommended level
-    Repeatable  bool         // Can be completed again
+    Repeatable            bool   // Can be completed again
+    RepeatReset           string // "daily", "cooldown", or empty (immediate re-accept)
+    RepeatCooldownSeconds int64  // Wait after completion for a cooldown reset
 
     Source      QuestSource  // How player gets quest (NPC, item, auto, script)
     Objectives  []Objective  // Kill, Collect, Deliver, Visit, Talk, Custom objectives
@@ -1614,6 +1631,7 @@ const (
     MessageTypeSelectCharacter  // Character selection
     MessageTypeCharacterSelected // Selection confirmed
     MessageTypePing             // Keep-alive
+    MessageTypeGuideHint        // One next-step hint, or empty text to clear it
     MessageTypeQuestAccepted    // Quest accepted
     MessageTypeQuestProgress    // Quest objective updated
     MessageTypeQuestReady       // Quest objectives complete and ready for turn-in
@@ -1716,10 +1734,19 @@ Two authoring overlays live in the play client and share the same shortcut arbit
 - **Level scaling helper** — `game/npcBehavior.js` (`scaleTemplate(template, targetLevel)`, deterministic rates; serializable state machine + `toLuaBehavior()` as preview/export only). Consumed by the factory UI; the server never runs it. Tests: `npcBehavior_test.mjs`, `npcFactory_test.mjs`, `dungeonBuilder_test.mjs`, `dungeonLibrary_test.mjs`, `api/dungeons_test.mjs`.
 
 REST contract for the dungeon library: [`docs/API.md`](docs/API.md) §5. Guides: `docs/user/admin-guide.md`.
+### Responsive presentation ownership
+
+`public/mud-client/public/global.css` defines the page z-index ladder with `--layer-*` properties. Shell chrome is below sheets. BattleStage is below NPC dialogs, shop, and Need/Greed. Component decoration keeps its local stacking context.
+
+`mobileStore.js` owns the viewport query for the mobile Room/Console shell, including short landscape. `App.svelte` uses the matching media query to hide its desktop home link. The mobile room scrolls independently from the console tab. `EntityPanel` accepts `--entity-card-width`; the short landscape room sets it to keep NPC cards inside the hero image. `phoneSheets.js` maps the bare commands `character`, `equipment`, `skills`, and `quests` to phone sheets. `MobileLayout` measures the header and the visible hotbar into `--sheet-top` and `--sheet-bottom`, and the sheet band stays between them. Typing those words in the console still sends the command.
+
+The existing `MUDXPlusStore.questNotifications` and `overlayStore` arrays own queued events. Producers enqueue and explicitly remove messages. They do not expire unseen messages or truncate the pending queue. `notificationPresentation.js` provides the combat/outcome/roll presentation gate and `createVisibleLifetime`, a Svelte action. Each renderer owns one action instance; each rendered card owns one timeout. Removing a card pauses its remaining reading time in a WeakMap keyed by the notification object. Rendering it again resumes that clock. Expiry and explicit dismissal remove the queued event. Mobile room tab visibility also gates room messages. The client keeps combat validation feedback in the BattleStage action banner.
+
+The outcome card contains a scrollable reward body and a separate Continue button. Short landscape reserves separate horizontal lanes for the outcome and Need/Greed.
 
 ### MUD Client — Onboarding Flow
 
-The MUD client (`/play`) uses a phase-based routing system in `App.svelte` to guide new players through onboarding before showing the game UI:
+The MUD client (`/play`) uses a phase-based routing system in `App.svelte` to guide new players through onboarding before showing the game UI. After character select, the server pushes `guideHint`. `GuideHint.svelte` renders that one line above the hotbar and sends the hint command, or `guide dismiss`. `pkg/guide` chooses the step from quest progress and the room graph, with no world-pack ids in the engine. `guide.enabled` in the ruleset defaults to on. `false` builds no hint and sends no `guideHint`. A game-mode file may set the same key. Hint text names the action in ordinary words (`Attack the <name>.`) so telnet, SSH, and Door can show the same line.
 
 ```
 App.svelte (phase-based routing)
@@ -2042,7 +2069,7 @@ pkg/
 ├── repository/        # Data access
 ├── db/                # Database client
 ├── resources/         # Per-character refilling balances
-├── ruleset/           # Level cap, level-up mode, death, new day, resource catalog, passive regen
+├── ruleset/           # Level cap, level-up mode, death, new day, resource catalog, passive regen, guide switch
 ├── gamemode/          # Process presentation and auth mode
 ├── authlocal/         # Local username/password sessions (fork default, Argon2id)
 ├── presentation/      # Text-client frame renderer and view
@@ -2173,3 +2200,7 @@ See [SCRIPTING.md](docs/design/SCRIPTING.md) for full documentation.
 # A10 combat focus
 
 `combatStart.targetId` names the enemy engaged by the initiating or joining player. The web client keeps the local focus ID and short lived threat warning in `MUDXPlusStore`; BattleStage and Tab send `focus <enemy ID>` when the selection changes. The command validates a living enemy in the player's combat instance and updates `CombatantRef.AutoAttackTargetID` without queuing an action. It sends a `combatAction` with `action: "focus"` to synchronize the client. An in-combat `attack <name>` still queues the hit and now sends the same focus action. Existing attack and hostile skill commands read the server target, then fall back to a living enemy.
+
+## Quiet Dark theme selection
+
+Quiet Dark: optional minimal dark client theme, opt-in via `ui.default_theme` or Settings. The theme registry accepts `quiet-dark` beside `dark-fantasy`, `clean-hud`, and `gilded`. Engine fallback remains `dark-fantasy`. `/api/server-info` `defaultTheme` still flows through SettingsStore to `body[data-theme]`. Theme CSS and OFL fonts live under `public/mud-client/public/themes/quiet-dark/`.

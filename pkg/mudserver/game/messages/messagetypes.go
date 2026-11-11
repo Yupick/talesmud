@@ -38,6 +38,7 @@ const (
 	MessageTypeRoomPresence = "roomPresence"
 
 	// Quest messages
+	MessageTypeGuideHint      = "guideHint"      // One next-step hint for a new character
 	MessageTypeQuestAccepted  = "questAccepted"  // Quest accepted
 	MessageTypeQuestProgress  = "questProgress"  // Quest objective progress updated
 	MessageTypeQuestReady     = "questReady"     // Quest objectives complete and ready for turn-in
@@ -60,6 +61,12 @@ const (
 	// Party roster overlay (structured members for web/mobile)
 	MessageTypeParty = "party"
 
+	// Read-only inspect of one player in the same room.
+	MessageTypePartyInspect = "partyInspect"
+
 	// Pending party invite toast/banner (Accept / Decline without typing)
 	MessageTypePartyInvite = "party_invite"
+
+	// Party Need/Greed loot roll popup (Need / Greed / Pass)
+	MessageTypeNeedGreed = "need_greed"
 )
