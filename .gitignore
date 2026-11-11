@@ -63,6 +63,11 @@ export.json
 out.json
 dialog1.json
 
+# Manual deployment package (generated locally, not committed)
+/artifacts/
+/talesmud-artifacts-*.tar.gz
+/talesmud-artifacts-*.tar.gz.sha256
+
 # Game assets (extracted sprites, purchased art - not for git)
 public/assets/img/
 img/*.png
